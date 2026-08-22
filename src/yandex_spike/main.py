@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from .inspector import SNAPSHOT_FILE, inspect_library
 from .yandex import (
     OFFICIAL_LIKE_CLIENT_ID,
     TOKEN_FILE_APP,
@@ -130,6 +131,35 @@ def cmd_probe_id() -> None:
     print(f"has_login: {result['has_login']}")
 
 
+def cmd_inspect() -> None:
+    print("Yandex library inspector")
+    print("-" * 40)
+    print()
+    print("Токены не печатаются. Write-запросов к Яндексу нет.")
+    print()
+
+    snapshot = inspect_library()
+
+    print()
+    print(f"Любимых треков:     {snapshot['liked_tracks_count']}")
+    print(f"Любимых исполнителей: {snapshot['liked_artists_count']}")
+    print(f"Любимых альбомов:   {snapshot['liked_albums_count']}")
+    print(f"Плейлистов:         {snapshot['playlists_count']}")
+    print(
+        f"ISRC в лайках:      {snapshot['isrc']['liked_tracks_with_isrc']} / "
+        f"{snapshot['liked_tracks_count']}"
+    )
+    print()
+    print("Плейлисты:")
+    for playlist in snapshot["playlists"]:
+        print(
+            f"   • {playlist['title']} — {playlist['track_count']} треков"
+        )
+    print()
+    print(f"Snapshot: {SNAPSHOT_FILE}")
+    print("Raw:      .data/raw/")
+
+
 def cmd_oauth_app_info() -> None:
     print("Публичный паспорт official-like OAuth app")
     print("-" * 40)
@@ -158,6 +188,7 @@ def main() -> None:
             "oauth-app-info",
             "auth-implicit",
             "auth-app",
+            "inspect",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
     )
@@ -171,5 +202,7 @@ def main() -> None:
         cmd_oauth_app_info()
     elif args.command == "auth-implicit":
         cmd_auth_implicit()
-    else:
+    elif args.command == "auth-app":
         cmd_auth_app()
+    else:
+        cmd_inspect()

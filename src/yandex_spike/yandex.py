@@ -440,41 +440,5 @@ def authenticate_implicit() -> dict:
     }
 
 
-def get_library_snapshot(client: Client) -> dict:
-    account_status = client.me()
-
-    liked_tracks = client.users_likes_tracks()
-    playlists = client.users_playlists()
-
-    snapshot = {
-        "account": {
-            "uid": (
-                account_status.account.uid
-                if account_status.account
-                else None
-            ),
-            "login": (
-                account_status.account.login
-                if account_status.account
-                else None
-            ),
-            "display_name": (
-                account_status.account.display_name
-                if account_status.account
-                else None
-            ),
-        },
-        "liked_tracks_count": len(liked_tracks),
-        "playlists_count": len(playlists),
-        "playlists": [
-            {
-                "uid": playlist.uid,
-                "kind": playlist.kind,
-                "title": playlist.title,
-                "track_count": playlist.track_count,
-            }
-            for playlist in playlists
-        ],
-    }
-
-    return snapshot
+# Выгрузка библиотеки — inspect_library() в inspector.py (A1).
+# Старый snapshot вызывал client.me() и users_playlists() без kind — оба вызова неверные.

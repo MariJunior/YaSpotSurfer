@@ -28,7 +28,13 @@ uv run yandex-spike auth-implicit
 
 Своё OAuth-приложение (`YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` в `.env`) token получает, но Music API отвечает 403.
 
-Снимок библиотеки в этом шаге не запускается.
+Выгрузка библиотеки (нужен Music token):
+
+```bash
+uv run yandex-spike inspect
+```
+
+Пишет `.data/library-snapshot.json` и `.data/raw/`. Токены и write-запросы к Яндексу не используются.
 
 ## Секреты
 

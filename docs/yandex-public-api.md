@@ -43,6 +43,8 @@ Authorization: OAuth <token>
 uv run yandex-spike probe-id
 ```
 
+Live 2026-08-22: own-app token → HTTP 200, `has_id` / `has_login` true. Токен своего приложения на Яндекс ID работает.
+
 ### Каталог yandex.ru/dev и «музыка»
 
 Поиск по официальному dev-порталу даёт навыки Алисы (TTS-звуки), не API библиотеки Яндекс Музыки.
