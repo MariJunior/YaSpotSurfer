@@ -245,6 +245,84 @@
       ]
     },
     {
+      "id": "dash-vs-parens-subtitle",
+      "expect_status": "exact",
+      "source": {
+        "sourceId": "je-veux-src",
+        "title": "Je veux (à la harpe)",
+        "durationMs": 152110,
+        "artists": [{"name": "Greg Gontier"}],
+        "album": {"title": "Je veux"}
+      },
+      "candidates": [
+        {
+          "sourceId": "je-veux-dst",
+          "title": "Je veux - à la harpe",
+          "durationMs": 152112,
+          "artists": [{"name": "Greg Gontier"}],
+          "album": {"title": "Je veux"}
+        }
+      ]
+    },
+    {
+      "id": "remix-beats-original-nina",
+      "expect_status": "exact",
+      "expect_selected": "nina-remix",
+      "source": {
+        "sourceId": "nina-src",
+        "title": "That's All I Ask",
+        "version": "HAAi Remix / Extended Edit",
+        "durationMs": 390160,
+        "artists": [{"name": "Nina Simone"}, {"name": "HAAi"}],
+        "album": {"title": "Remix"}
+      },
+      "candidates": [
+        {
+          "sourceId": "nina-original",
+          "title": "That's All I Ask",
+          "durationMs": 152897,
+          "artists": [{"name": "Nina Simone"}],
+          "album": {"title": "Remix"}
+        },
+        {
+          "sourceId": "nina-remix",
+          "title": "That's All I Ask - HAAi Remix / Extended Edit",
+          "durationMs": 390164,
+          "artists": [{"name": "Nina Simone"}, {"name": "HAAi"}],
+          "album": {"title": "Remix"}
+        }
+      ]
+    },
+    {
+      "id": "same-isrc-two-spotify-ids",
+      "expect_status": "exact",
+      "source": {
+        "sourceId": "love-src",
+        "title": "Where Is The Love?",
+        "durationMs": 272530,
+        "artists": [{"name": "Black Eyed Peas"}],
+        "album": {"title": "Elephunk"}
+      },
+      "candidates": [
+        {
+          "sourceId": "love-a",
+          "title": "Where Is The Love?",
+          "durationMs": 272533,
+          "artists": [{"name": "Black Eyed Peas"}],
+          "album": {"title": "Elephunk"},
+          "isrc": "USIR10311862"
+        },
+        {
+          "sourceId": "love-b",
+          "title": "Where Is The Love?",
+          "durationMs": 272533,
+          "artists": [{"name": "Black Eyed Peas"}],
+          "album": {"title": "Elephunk"},
+          "isrc": "USIR10311862"
+        }
+      ]
+    },
+    {
       "id": "isrc-mismatch",
       "forbid_auto": true,
       "expect_status": "not-found",

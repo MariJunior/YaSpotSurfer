@@ -7,7 +7,12 @@ from .entities import (
     Track,
 )
 from .matching import MatchConfig, match_track, score_candidate
-from .normalization import NormalizedTitle, normalize_artist, normalize_title
+from .normalization import (
+    NormalizedTitle,
+    normalize_artist,
+    normalize_title,
+    title_head,
+)
 
 __all__ = [
     "AlbumRef",
@@ -22,4 +27,5 @@ __all__ = [
     "normalize_artist",
     "normalize_title",
     "score_candidate",
+    "title_head",
 ]

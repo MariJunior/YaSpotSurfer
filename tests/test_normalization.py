@@ -40,6 +40,10 @@ class NormalizationTests(unittest.TestCase):
         self.assertIn("remastered", bracket.version_tags)
         self.assertIn("remaster", dashed.version_tags)
 
+    def test_dash_does_not_drop_elka_provanse(self) -> None:
+        result = normalize_title("Ёлка — Прованс")
+        self.assertEqual(result.text, "елка прованс")
+
     def test_year_title_kept_without_version_tag(self) -> None:
         result = normalize_title("1999")
         self.assertEqual(result.text, "1999")

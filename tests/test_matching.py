@@ -46,6 +46,12 @@ class MatchingTests(unittest.TestCase):
             expected = case.get("expect_status")
             if expected:
                 self.assertEqual(result.status, expected, msg=case_id)
+            selected_id = case.get("expect_selected")
+            if selected_id and result.selected:
+                self.assertTrue(
+                    result.selected.track.id.endswith(selected_id),
+                    msg=f"{case_id} selected {result.selected.track.id}",
+                )
 
     def test_wrong_auto_is_regression(self) -> None:
         for case_id, case in self.cases.items():
@@ -118,6 +124,34 @@ class MatchingTests(unittest.TestCase):
         result = match_track(source, [left, right])
         self.assertEqual(result.status, "review")
         self.assertIsNone(result.selected)
+
+    def test_same_isrc_is_not_ambiguous(self) -> None:
+        result, _ = self._run_case("same-isrc-two-spotify-ids")
+        self.assertEqual(result.status, "exact")
+        self.assertIsNotNone(result.selected)
+        self.assertEqual(len(result.candidates), 1)
+
+    def test_artist_drops_gruppa_prefix(self) -> None:
+        source = _track(
+            {
+                "sourceId": "zod-src",
+                "title": "Живём дальше!",
+                "durationMs": 261870,
+                "artists": [{"name": "Группа Зодчие"}],
+                "album": {"title": "X"},
+            }
+        )
+        candidate = _track(
+            {
+                "sourceId": "zod-dst",
+                "title": "Живём дальше!",
+                "durationMs": 261877,
+                "artists": [{"name": "Зодчие"}],
+                "album": {"title": "X"},
+            }
+        )
+        scored = score_candidate(source, candidate)
+        self.assertGreaterEqual(scored.reasons["artist"], 0.98)
 
 
 if __name__ == "__main__":

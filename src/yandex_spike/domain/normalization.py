@@ -8,10 +8,13 @@ from dataclasses import dataclass
 # Длинные фразы раньше коротких, чтобы "radio edit" не резался на "radio".
 VERSION_TAGS = (
     "radio edit",
+    "extended edit",
+    "club edit",
     "sped up",
     "remastered",
     "instrumental",
     "acoustic",
+    "extended",
     "remaster",
     "remix",
     "slowed",
@@ -20,6 +23,7 @@ VERSION_TAGS = (
     "live",
     "mono",
     "stereo",
+    "edit",
 )
 
 _FEAT_RE = re.compile(
@@ -31,6 +35,8 @@ _PUNCT_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _SPACE_RE = re.compile(r"\s+")
 # Год рядом с remaster/live: "2011 Remaster", не заголовок вроде "1999".
 _YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+# Spotify часто пишет подзаголовок после " - ", Яндекс — в скобках.
+_DASH_SPLIT_RE = re.compile(r"\s+[-–—]\s+")
 _VERSION_FIND_RE = re.compile(
     r"\b(?:"
     + "|".join(re.escape(tag) for tag in VERSION_TAGS)
@@ -54,6 +60,11 @@ def extract_version_tags(title: str) -> tuple[str, ...]:
     # Границы слов: иначе "Olivia" ловит live, "coverage" ловит cover.
     found = [tag for tag in VERSION_TAGS if re.search(rf"\b{re.escape(tag)}\b", lowered)]
     return tuple(found)
+
+
+def title_head(title: str | None) -> str:
+    """Часть до первого ' - '. Сам normalize_title тире не режет: «Ёлка — Прованс»."""
+    return _DASH_SPLIT_RE.split(title or "", maxsplit=1)[0]
 
 
 def _strip_version_noise(text: str) -> str:

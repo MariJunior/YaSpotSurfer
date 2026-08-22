@@ -5,13 +5,17 @@ from difflib import SequenceMatcher
 from typing import Sequence
 
 from .entities import MatchCandidate, MatchResult, Track
-from .normalization import extract_version_tags
+from .normalization import extract_version_tags, normalize_title, title_head
 from .transliteration import transliterate
 
 
 # remastered и remaster — одна версия записи, не original.
 _TAG_ALIASES = {
     "remastered": "remaster",
+    "extended edit": "edit",
+    "club edit": "edit",
+    "extended": "edit",
+    "radio edit": "edit",
 }
 
 
@@ -63,6 +67,34 @@ def _normalize_isrc(value: str | None) -> str | None:
     return compact or None
 
 
+def title_similarity(source: Track, candidate: Track) -> float:
+    """Скобки и ' - subtitle' сравниваем как один core. Полный «Ёлка — Прованс» тоже жив."""
+    source_head = normalize_title(title_head(source.title)).text
+    candidate_head = normalize_title(title_head(candidate.title)).text
+    return max(
+        _text_similarity(source.normalized_title, candidate.normalized_title),
+        _text_similarity(source_head, candidate_head),
+        _text_similarity(source.normalized_title, candidate_head),
+        _text_similarity(source_head, candidate.normalized_title),
+    )
+
+
+def _artist_variants(name: str) -> tuple[str, ...]:
+    variants = [name]
+    for prefix in ("группа ", "the "):
+        if name.startswith(prefix) and name != prefix:
+            variants.append(name[len(prefix) :])
+    return tuple(variants)
+
+
+def _name_similarity(left: str, right: str) -> float:
+    return max(
+        _text_similarity(left_name, right_name)
+        for left_name in _artist_variants(left)
+        for right_name in _artist_variants(right)
+    )
+
+
 def artist_similarity(source: Track, candidate: Track) -> float:
     source_names = [artist.normalized_name for artist in source.artists if artist.normalized_name]
     candidate_names = [
@@ -82,7 +114,7 @@ def artist_similarity(source: Track, candidate: Track) -> float:
         for index, other in enumerate(candidate_names):
             if index in used:
                 continue
-            score = _text_similarity(name, other)
+            score = _name_similarity(name, other)
             if score > best:
                 best = score
                 best_index = index
@@ -143,7 +175,7 @@ def score_candidate(
             reasons={"isrc": 0.0, "title": 0.0, "artist": 0.0, "album": 0.0, "duration": 0.0, "version": 0.0},
         )
 
-    title = _text_similarity(source.normalized_title, candidate.normalized_title)
+    title = title_similarity(source, candidate)
     artist = artist_similarity(source, candidate)
     album = album_similarity(source, candidate)
     duration = duration_similarity(source, candidate, config)
@@ -175,6 +207,21 @@ def score_candidate(
     )
 
 
+def _dedupe_same_isrc(candidates: list[MatchCandidate]) -> list[MatchCandidate]:
+    """Один ISRC = одна запись (альбом/сингл). Иначе Where Is The Love? уходит в review."""
+    best_by_isrc: dict[str, MatchCandidate] = {}
+    without_isrc: list[MatchCandidate] = []
+    for candidate in candidates:
+        isrc = _normalize_isrc(candidate.track.isrc)
+        if not isrc:
+            without_isrc.append(candidate)
+            continue
+        previous = best_by_isrc.get(isrc)
+        if previous is None or candidate.score > previous.score:
+            best_by_isrc[isrc] = candidate
+    return [*best_by_isrc.values(), *without_isrc]
+
+
 def _is_exact_shape(candidate: MatchCandidate) -> bool:
     reasons = candidate.reasons
     return (
@@ -195,6 +242,7 @@ def match_track(
 ) -> MatchResult:
     config = config or MatchConfig()
     scored = [score_candidate(source, candidate, config) for candidate in candidates]
+    scored = _dedupe_same_isrc(scored)
     scored.sort(key=lambda item: item.score, reverse=True)
     top = tuple(scored[:5])
 
