@@ -33,6 +33,9 @@ REDIRECT_URI = f"http://{HOST}:{PORT}/callback"
 OAUTH_URL = "https://oauth.yandex.ru/authorize"
 TOKEN_URL = "https://oauth.yandex.ru/token"
 MUSIC_ACCOUNT_STATUS_URL = "https://api.music.yandex.net/account/status"
+# Официальный API Яндекс ID — не Music API.
+YANDEX_ID_INFO_URL = "https://login.yandex.ru/info"
+OAUTH_CLIENT_INFO_URL = "https://oauth.yandex.ru/client/{client_id}/info"
 
 # Те же заголовки, что ставит yandex-music 3.0.0 (RequestBase).
 MUSIC_API_HEADERS = {
@@ -205,6 +208,49 @@ def probe_account_status(access_token: str) -> dict:
         "http_error_excerpt": error_text,
         "library_init_ok": library_init_ok,
         "library_error": library_error,
+    }
+
+
+def probe_yandex_id(access_token: str) -> dict:
+    """Официальный GET login.yandex.ru/info. Логин в лог не печатаем."""
+    response = requests.get(
+        YANDEX_ID_INFO_URL,
+        headers={"Authorization": f"OAuth {access_token}"},
+        params={"format": "json"},
+        timeout=15,
+    )
+
+    has_id = False
+    has_login = False
+    if response.status_code == 200:
+        try:
+            payload = response.json()
+            has_id = "id" in payload
+            has_login = "login" in payload
+        except ValueError:
+            pass
+
+    return {
+        "http_status": response.status_code,
+        "has_id": has_id,
+        "has_login": has_login,
+    }
+
+
+def fetch_oauth_client_info(client_id: str) -> dict:
+    """Публичный паспорт OAuth-приложения: имя и scopes, без секретов."""
+    response = requests.get(
+        OAUTH_CLIENT_INFO_URL.format(client_id=client_id),
+        timeout=15,
+    )
+    response.raise_for_status()
+    raw = response.json()
+    return {
+        "id": raw.get("id"),
+        "name": raw.get("name"),
+        "callback": raw.get("callback"),
+        "is_yandex": raw.get("is_yandex"),
+        "scope": raw.get("scope") or [],
     }
 
 

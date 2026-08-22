@@ -123,11 +123,9 @@ official-like implicit token принимает Music API
 
 ## 5. Официальный endpoint для `music:api-public`
 
-Публичная документация [Яндекс ID](https://yandex.ru/dev/id/doc/ru/) описывает OAuth и API профиля (логин, имя, email). Отдельного документированного host «Yandex Music Public API», который принимает token своего приложения и отдаёт liked tracks / playlists, **не найдено**.
+Разбор вынесен в [yandex-public-api.md](yandex-public-api.md) (A0 трек 2).
 
-`api.music.yandex.net` — reverse-engineered private API клиентов Музыки. Scope `music:api-public` в кабинете OAuth существует, но на этот host наш token не принимается.
-
-Полный разбор, есть ли вообще usable official Music API для бота — **этап A0 трек 2**, этот документ его не закрывает.
+Кратко: usable official Music API для liked/playlists **нет**. Свой token — для Яндекс ID. Official Music app использует scopes `music:read` / `music:write` / `music:content`, не `music:api-public`. `api.music.yandex.net` свой token отвергает (403).
 
 ---
 

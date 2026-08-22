@@ -21,6 +21,9 @@ uv run yandex-spike auth-implicit
 
 `probe` проверяет сохранённые токены на `api.music.yandex.net/account/status` и не печатает секреты.
 
+Официальный Яндекс ID (не Музыка): `uv run yandex-spike probe-id`.  
+Вывод по public API: [docs/yandex-public-api.md](docs/yandex-public-api.md).
+
 `auth-implicit` получает Music-совместимый token через браузер (вставьте redirect URL с `#access_token=` только в локальный терминал, не в чат).
 
 Своё OAuth-приложение (`YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` в `.env`) token получает, но Music API отвечает 403.
