@@ -39,6 +39,24 @@ Write-запросов к Яндексу нет. Токены не логиру�
 - список плейлистов — `users_playlists_list()`, не `users_playlists()`;
 - `users_playlists(kind)` — один плейлист.
 
+## Live 2026-08-22
+
+| Поле | Значение |
+|------|----------|
+| liked tracks | 3996 |
+| liked artists | 217 |
+| liked albums | 203 |
+| playlists | 51 |
+| ISRC в лайках | **0 / 3996** |
+
+`inspect` отработал до конца. Sample-плейлисты — два самых коротких (по 1 треку), как и задумано.
+
 ## ISRC
 
-В `yandex-music==3.0.0` у модели `Track` **нет поля `isrc`**. Inspector ищет ключи `*isrc*` рекурсивно в `to_dict()`. Итог смотреть в `library-snapshot.json` → `isrc`.
+В `yandex-music==3.0.0` у модели `Track` **нет поля `isrc`**.
+
+Проверка первого raw-трека (только ключи, без названий): в `to_dict()` нет `isrc`; `meta_data` = null; в JSON трека подстроки `isrc` нет. Album даёт `year` / `release_date` / `labels`, не ISRC.
+
+Для matching v1 **нельзя опираться на ISRC как на первый приоритет** по данным Яндекса. База: normalized artist + title + duration + album/version.
+
+Итог смотреть в `library-snapshot.json` → `isrc`.
