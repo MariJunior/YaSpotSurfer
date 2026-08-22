@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .application.match_preview import preview_self_match
 from .application.normalize_preview import preview_liked_tracks
 from .infrastructure.file_store import save_tracks
 from .inspector import SNAPSHOT_FILE, inspect_library
@@ -209,6 +210,39 @@ def cmd_normalize_preview() -> None:
     print(f"JSON: {preview_path}")
 
 
+def cmd_match_preview() -> None:
+    print("Match preview (offline self-match)")
+    print("-" * 40)
+    print()
+    print("Токены и write-запросы не используются. Нужен inspect-snapshot.")
+    print()
+
+    report = preview_self_match(SNAPSHOT_FILE, limit=250)
+    report_path = Path(".data") / "match-preview.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    counts = report["counts"]
+    print(f"Каталог:          {report['catalog_size']}")
+    print(f"С version tags:   {report['tagged_in_catalog']}")
+    print(f"exact:            {counts.get('exact', 0)}")
+    print(f"high-confidence:  {counts.get('high-confidence', 0)}")
+    print(f"review:           {counts.get('review', 0)}")
+    print(f"not-found:        {counts.get('not-found', 0)}")
+    print(f"wrong_auto:       {report['wrong_auto_count']}")
+    print(f"runner_up_auto:   {report['runner_up_auto_count']}")
+    for item in report["runner_up_auto"][:8]:
+        print(
+            f"   • {item['title']} → {item['rival_title']} "
+            f"({item['rival_score']})"
+        )
+    print()
+    print(f"JSON: {report_path}")
+
+
 def cmd_oauth_app_info() -> None:
     print("Публичный паспорт official-like OAuth app")
     print("-" * 40)
@@ -240,6 +274,7 @@ def main() -> None:
             "inspect",
             "spotify-spike",
             "normalize-preview",
+            "match-preview",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
     )
@@ -259,5 +294,7 @@ def main() -> None:
         cmd_inspect()
     elif args.command == "spotify-spike":
         cmd_spotify_spike()
-    else:
+    elif args.command == "normalize-preview":
         cmd_normalize_preview()
+    else:
+        cmd_match_preview()

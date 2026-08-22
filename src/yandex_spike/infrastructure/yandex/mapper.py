@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from yandex_spike.domain.entities import AlbumRef, ArtistRef, Playlist, Track
-from yandex_spike.domain.normalization import normalize_artist, normalize_title
+from yandex_spike.domain.normalization import (
+    extract_version_tags,
+    normalize_artist,
+    normalize_title,
+)
 
 
 def track_from_yandex_snapshot(payload: dict[str, Any]) -> Track:
@@ -34,6 +38,13 @@ def track_from_yandex_snapshot(payload: dict[str, Any]) -> Track:
         )
 
     # Live inspect: ISRC в модели Track нет, поле почти всегда None.
+    # Remaster/live часто в отдельном version, не в title.
+    version = payload.get("version")
+    version_tags = tuple(
+        dict.fromkeys(
+            [*normalized.version_tags, *extract_version_tags(version or "")]
+        )
+    )
     source_id = str(payload.get("sourceId") or payload.get("id") or "")
     return Track(
         id=f"yandex:{source_id}",
@@ -42,8 +53,8 @@ def track_from_yandex_snapshot(payload: dict[str, Any]) -> Track:
         artists=artists,
         album=album,
         duration_ms=payload.get("durationMs"),
-        version=payload.get("version"),
-        version_tags=normalized.version_tags,
+        version=version,
+        version_tags=version_tags,
         isrc=payload.get("isrc"),
         available=payload.get("available"),
         provider_ids=(("yandex", source_id),),

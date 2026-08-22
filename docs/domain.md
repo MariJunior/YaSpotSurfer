@@ -15,7 +15,7 @@ infrastructure  Yandex/Spotify mappers, JSON file store
 
 - `Track` — провайдер-независимый трек. `provider_ids` — кортеж пар `(provider, id)`. `raw` в matching не участвует и в JSON-store не пишется.
 - `ArtistRef`, `AlbumRef`, `Playlist`
-- `MatchCandidate`, `MatchResult` — каркас для A4, движка matching здесь нет.
+- `MatchCandidate`, `MatchResult` — результат `match_track` (A4). Подробности: [matching.md](matching.md).
 
 Yandex `isrc` из inspect почти всегда `None`. Spotify `isrc` берём из `external_ids`, если search его отдал.
 

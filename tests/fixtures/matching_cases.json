@@ -1,0 +1,269 @@
+{
+  "cases": [
+    {
+      "id": "original-self",
+      "expect_status": "exact",
+      "source": {
+        "sourceId": "self-1",
+        "title": "Lullaby",
+        "artists": [{"name": "The Cure"}],
+        "durationMs": 246000,
+        "album": {"title": "Disintegration"}
+      },
+      "candidates": [
+        {
+          "sourceId": "self-1",
+          "title": "Lullaby",
+          "artists": [{"name": "The Cure"}],
+          "durationMs": 246000,
+          "album": {"title": "Disintegration"}
+        }
+      ]
+    },
+    {
+      "id": "remaster-vs-original",
+      "forbid_auto": true,
+      "source": {
+        "sourceId": "2773110",
+        "title": "Time",
+        "version": "2011 - Remaster",
+        "durationMs": 422850,
+        "artists": [{"name": "Pink Floyd"}],
+        "album": {"title": "The Discovery Boxset"}
+      },
+      "candidates": [
+        {
+          "sourceId": "time-original",
+          "title": "Time",
+          "durationMs": 413000,
+          "artists": [{"name": "Pink Floyd"}],
+          "album": {"title": "The Dark Side of the Moon"}
+        }
+      ]
+    },
+    {
+      "id": "live-vs-studio",
+      "forbid_auto": true,
+      "source": {
+        "sourceId": "live-1",
+        "title": "All I Want",
+        "version": "Live in Dublin / 2022",
+        "durationMs": 535610,
+        "artists": [{"name": "Kodaline"}]
+      },
+      "candidates": [
+        {
+          "sourceId": "studio-1",
+          "title": "All I Want",
+          "durationMs": 306000,
+          "artists": [{"name": "Kodaline"}]
+        }
+      ]
+    },
+    {
+      "id": "remix-vs-original-real",
+      "forbid_auto": true,
+      "source": {
+        "source": "yandex",
+        "sourceId": "93278703",
+        "title": "Balder",
+        "version": "Shyloom Remix",
+        "durationMs": 137090,
+        "artists": [
+          {"name": "Power-Haus"},
+          {"name": "Shyloom"},
+          {"name": "Christian Reindl"},
+          {"name": "Lucie Paradis"}
+        ],
+        "album": {"title": "Revival"}
+      },
+      "candidates": [
+        {
+          "source": "yandex",
+          "sourceId": "63662364",
+          "title": "Balder",
+          "version": null,
+          "durationMs": 140000,
+          "artists": [
+            {"name": "Christian Reindl"},
+            {"name": "Lucie Paradis"},
+            {"name": "Power-Haus"}
+          ],
+          "album": {"title": "The North Album"}
+        }
+      ]
+    },
+    {
+      "id": "acoustic-vs-original",
+      "forbid_auto": true,
+      "source": {
+        "sourceId": "14530558",
+        "title": "I Love You",
+        "version": "Acoustic",
+        "durationMs": 288430,
+        "artists": [{"name": "Woodkid"}]
+      },
+      "candidates": [
+        {
+          "sourceId": "woodkid-studio",
+          "title": "I Love You",
+          "durationMs": 272000,
+          "artists": [{"name": "Woodkid"}]
+        }
+      ]
+    },
+    {
+      "id": "feat-same-recording",
+      "expect_status": "exact",
+      "source": {
+        "sourceId": "feat-src",
+        "title": "Fought & Lost (feat. Brian May)",
+        "durationMs": 252860,
+        "artists": [{"name": "Sam Ryder"}, {"name": "Brian May"}]
+      },
+      "candidates": [
+        {
+          "sourceId": "feat-dst",
+          "title": "Fought & Lost",
+          "durationMs": 252800,
+          "artists": [{"name": "Brian May"}, {"name": "Sam Ryder"}]
+        }
+      ]
+    },
+    {
+      "id": "russian-transliteration",
+      "expect_status": "exact",
+      "source": {
+        "sourceId": "148866675",
+        "title": "Я влюблён",
+        "durationMs": 176030,
+        "artists": [{"name": "Пекинский Велосипед"}]
+      },
+      "candidates": [
+        {
+          "sourceId": "translit-1",
+          "title": "Ya vlyublen",
+          "durationMs": 176000,
+          "artists": [{"name": "Pekinskiy Velosiped"}]
+        }
+      ]
+    },
+    {
+      "id": "same-title-different-artist",
+      "forbid_auto": true,
+      "source": {
+        "sourceId": "148866675",
+        "title": "Я влюблён",
+        "durationMs": 176030,
+        "artists": [{"name": "Пекинский Велосипед"}]
+      },
+      "candidates": [
+        {
+          "sourceId": "128460095",
+          "title": "Я ВЛЮБЛЁН",
+          "durationMs": 165710,
+          "artists": [{"name": "GERA AMEN"}]
+        }
+      ]
+    },
+    {
+      "id": "cover-same-title",
+      "forbid_auto": true,
+      "source": {
+        "sourceId": "105460686",
+        "title": "Running up That Hill",
+        "durationMs": 252530,
+        "artists": [{"name": "Night Rider"}, {"name": "Affiance"}]
+      },
+      "candidates": [
+        {
+          "sourceId": "2203363",
+          "title": "Running Up That Hill (A Deal With God)",
+          "durationMs": 298930,
+          "artists": [{"name": "Kate Bush"}]
+        }
+      ]
+    },
+    {
+      "id": "different-duration",
+      "forbid_auto": true,
+      "expect_status": "review",
+      "source": {
+        "sourceId": "dur-a",
+        "title": "Song Name",
+        "durationMs": 180000,
+        "artists": [{"name": "Same Artist"}],
+        "album": {"title": "Same Album"}
+      },
+      "candidates": [
+        {
+          "sourceId": "dur-b",
+          "title": "Song Name",
+          "durationMs": 240000,
+          "artists": [{"name": "Same Artist"}],
+          "album": {"title": "Same Album"}
+        }
+      ]
+    },
+    {
+      "id": "missing-album",
+      "expect_status": "exact",
+      "source": {
+        "sourceId": "no-album-src",
+        "title": "Empty Skies",
+        "durationMs": 240000,
+        "artists": [{"name": "HÆLOS"}]
+      },
+      "candidates": [
+        {
+          "sourceId": "no-album-dst",
+          "title": "Empty Skies",
+          "durationMs": 240100,
+          "artists": [{"name": "HÆLOS"}],
+          "album": {"title": "Full Circle"}
+        }
+      ]
+    },
+    {
+      "id": "isrc-exact",
+      "expect_status": "exact",
+      "source": {
+        "sourceId": "isrc-src",
+        "title": "Lullaby - Remastered",
+        "durationMs": 246000,
+        "artists": [{"name": "The Cure"}],
+        "isrc": "GBUM71000213"
+      },
+      "candidates": [
+        {
+          "sourceId": "isrc-dst",
+          "title": "Lullaby",
+          "durationMs": 246000,
+          "artists": [{"name": "The Cure"}],
+          "isrc": "gbum71000213"
+        }
+      ]
+    },
+    {
+      "id": "isrc-mismatch",
+      "forbid_auto": true,
+      "expect_status": "not-found",
+      "source": {
+        "sourceId": "isrc-bad-src",
+        "title": "Lullaby",
+        "durationMs": 246000,
+        "artists": [{"name": "The Cure"}],
+        "isrc": "AAAAAAAAAAAA"
+      },
+      "candidates": [
+        {
+          "sourceId": "isrc-bad-dst",
+          "title": "Lullaby",
+          "durationMs": 246000,
+          "artists": [{"name": "The Cure"}],
+          "isrc": "BBBBBBBBBBBB"
+        }
+      ]
+    }
+  ]
+}

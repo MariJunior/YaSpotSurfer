@@ -50,7 +50,8 @@ uv run yandex-spike spotify-spike
 
 ```bash
 uv run yandex-spike normalize-preview
-uv run python -m unittest tests.test_normalization
+uv run yandex-spike match-preview
+uv run python -m unittest tests.test_normalization tests.test_matching
 ```
 
 ## Секреты
