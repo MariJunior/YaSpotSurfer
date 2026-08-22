@@ -4,10 +4,14 @@ import argparse
 import json
 from pathlib import Path
 
+from .application.dry_run import run_dry_run
 from .application.match_preview import preview_self_match
 from .application.normalize_preview import preview_liked_tracks
 from .infrastructure.file_store import save_tracks
+from .infrastructure.spotify.searcher import SpotifySearcher
+from .infrastructure.yandex.mapper import track_from_yandex_snapshot
 from .inspector import SNAPSHOT_FILE, inspect_library
+from .spotify import authenticate as authenticate_spotify
 from .spotify import run_spotify_spike
 from .yandex import (
     OFFICIAL_LIKE_CLIENT_ID,
@@ -243,6 +247,65 @@ def cmd_match_preview() -> None:
     print(f"JSON: {report_path}")
 
 
+def cmd_migrate_dry_run(*, limit: int, resume: bool) -> None:
+    print("Migrate dry-run")
+    print("-" * 40)
+    print()
+    print("Write в Spotify нет. Нужны inspect-snapshot и Spotify token.")
+    print()
+
+    if not SNAPSHOT_FILE.exists():
+        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike inspect")
+
+    snapshot = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
+    items = snapshot.get("liked_tracks") or []
+    tracks = [track_from_yandex_snapshot(item) for item in items[:limit]]
+
+    state_path = Path(".data") / "dry-run-state.json"
+    processed = {}
+    if resume and state_path.exists():
+        processed = json.loads(state_path.read_text(encoding="utf-8")).get(
+            "processed"
+        ) or {}
+        print(f"Resume: уже есть {len(processed)} результатов.")
+
+    access_token = authenticate_spotify()
+    searcher = SpotifySearcher(access_token)
+    report = run_dry_run(tracks, searcher, processed=processed)
+
+    report_path = Path(".data") / "dry-run-report.json"
+    state_path.write_text(
+        json.dumps({"processed": report["processed"]}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    public_report = {key: value for key, value in report.items() if key != "processed"}
+    report_path.write_text(
+        json.dumps(public_report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    counts = report["counts"]
+    tz_counts = report["tz_counts"]
+    print(f"Треков:           {report['track_count']}")
+    print(f"exact:            {counts.get('exact', 0)}")
+    print(f"high-confidence:  {counts.get('high-confidence', 0)}")
+    print(f"review:           {counts.get('review', 0)}")
+    print(f"not-found:        {counts.get('not-found', 0)}")
+    print(
+        f"TZ: exact={tz_counts['exact']} review={tz_counts['review']} "
+        f"not_found={tz_counts['not_found']}"
+    )
+    print(f"wrote_to_spotify: {report['wrote_to_spotify']}")
+    print()
+    for row in report["results"][:12]:
+        selected = row.get("selected") or {}
+        target = selected.get("title") or "-"
+        print(f"   {row['status']:16} {row['title']} → {target}")
+    print()
+    print(f"Report: {report_path}")
+    print(f"State:  {state_path}")
+
+
 def cmd_oauth_app_info() -> None:
     print("Публичный паспорт official-like OAuth app")
     print("-" * 40)
@@ -275,8 +338,20 @@ def main() -> None:
             "spotify-spike",
             "normalize-preview",
             "match-preview",
+            "migrate-dry-run",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Для migrate-dry-run: сколько лайков прогнать (не вся библиотека).",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Для migrate-dry-run: пропустить уже записанные в dry-run-state.json.",
     )
     args = parser.parse_args()
 
@@ -296,5 +371,7 @@ def main() -> None:
         cmd_spotify_spike()
     elif args.command == "normalize-preview":
         cmd_normalize_preview()
-    else:
+    elif args.command == "match-preview":
         cmd_match_preview()
+    else:
+        cmd_migrate_dry_run(limit=args.limit, resume=args.resume)

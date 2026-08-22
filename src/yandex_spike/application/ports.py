@@ -19,10 +19,14 @@ class MusicLibraryReader(Protocol):
         ...
 
 
-class MusicCatalogWriter(Protocol):
+class MusicCatalogSearcher(Protocol):
+    """Только поиск. Dry-run не должен видеть write-методы."""
+
     def search_track(self, track: Track) -> list[Track]:
         ...
 
+
+class MusicCatalogWriter(MusicCatalogSearcher, Protocol):
     def save_liked_tracks(self, tracks: list[Track]) -> None:
         ...
 

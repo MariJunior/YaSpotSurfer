@@ -51,8 +51,11 @@ uv run yandex-spike spotify-spike
 ```bash
 uv run yandex-spike normalize-preview
 uv run yandex-spike match-preview
-uv run python -m unittest tests.test_normalization tests.test_matching
+uv run yandex-spike migrate-dry-run --limit 20
+uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run
 ```
+
+Dry-run не пишет в Spotify. Подробности: [docs/dry-run.md](docs/dry-run.md).
 
 ## Секреты
 

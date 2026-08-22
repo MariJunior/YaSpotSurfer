@@ -1,7 +1,13 @@
-from .ports import MigrationStore, MusicCatalogWriter, MusicLibraryReader
+from .ports import (
+    MigrationStore,
+    MusicCatalogSearcher,
+    MusicCatalogWriter,
+    MusicLibraryReader,
+)
 
 __all__ = [
     "MigrationStore",
+    "MusicCatalogSearcher",
     "MusicCatalogWriter",
     "MusicLibraryReader",
 ]

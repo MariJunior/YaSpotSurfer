@@ -239,7 +239,7 @@ def _api(
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
-            return requests.request(
+            response = requests.request(
                 method,
                 f"{API_BASE}{path}",
                 headers={
@@ -258,12 +258,21 @@ def _api(
             )
             if attempt < attempts:
                 time.sleep(2 * attempt)
+            continue
+
+        # Dev Mode 2026 легко ловит 429 на серии search.
+        if response.status_code == 429 and attempt < attempts:
+            retry_after = response.headers.get("Retry-After", "")
+            wait_sec = int(retry_after) if retry_after.isdigit() else 2 * attempt
+            print(f"429 {method} {path}, жду {wait_sec}с")
+            time.sleep(wait_sec)
+            continue
+        return response
 
     raise RuntimeError(
         "Не удалось соединиться с api.spotify.com. "
         "OAuth уже прошёл, токен лежит в .data/spotify-token.json — "
-        "просто повтори `uv run yandex-spike spotify-spike`. "
-        "Если падает снова: VPN или другая сеть, затем тот же команда."
+        "повтори ту же команду. Если падает снова: VPN или другая сеть."
     ) from last_error
 
 
