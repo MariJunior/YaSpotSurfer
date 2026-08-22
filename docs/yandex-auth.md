@@ -83,24 +83,41 @@ Accept-Language: ru
 - scope `music:api-public`;
 - authorization code + `http://127.0.0.1:8765/callback`;
 - `POST /token` успешно отдаёт `access_token` (и обычно `refresh_token`);
-- тот же token на `GET https://api.music.yandex.net/account/status` → **401**.
+- тот же token на `GET https://api.music.yandex.net/account/status` → **HTTP 403** (библиотека: `UnauthorizedError`).
 
 Вывод: это валидный **Яндекс ID / OAuth token своего client_id**, но не token, который принимает **private** host `api.music.yandex.net`.
 
-Гипотеза (подтверждается документацией библиотеки, live-проверка implicit — командой `auth-implicit`):
+### Live-проверка 2026-08-22
+
+`auth-implicit` + `probe` на одной машине:
+
+| | own-app `yandex-token.json` | official-like `yandex-token-music.json` |
+|--|--|--|
+| HTTP `/account/status` | 403 | **200** |
+| `Client.init()` | `UnauthorizedError` | **ok** |
+| `access_token_length` | 63 | 63 |
+| `looks_like_jwt` | false | false |
+| `has_refresh_token` | true | false |
+| `expires_in` | 31536000 (~365d) | 31022038 (~359d) |
+| `source` | нет (старый файл) | `implicit-official-like` |
+
+Формат токена **не** отличает их: оба opaque, длина 63, не JWT. Разница — какой OAuth client выпустил token.
+
+Гипотеза **подтверждена**:
 
 ```text
 токен своего приложения  ≠  токен official Music client
+official-like implicit token принимает Music API
 ```
 
-Сравнивать токены только через fingerprint (`probe`): длина, JWT-подобность, наличие refresh, `expires_in`. Сами значения не логировать.
+Сравнивать токены только через fingerprint (`probe`). Сами значения не логировать и не вставлять в чат.
 
 Два файла специально разделены:
 
-| Файл | Источник | Ожидание |
-|------|----------|----------|
-| `.data/yandex-token.json` | своё приложение | OAuth ок, Music API 401 |
-| `.data/yandex-token-music.json` | implicit official-like | кандидат в рабочий Music token |
+| Файл | Источник | Факт |
+|------|----------|------|
+| `.data/yandex-token.json` | своё приложение | OAuth ок, Music API 403 |
+| `.data/yandex-token-music.json` | implicit official-like | Music API 200, `Client.init()` ok |
 
 ---
 
@@ -135,10 +152,10 @@ uv run yandex-spike probe
 uv run yandex-spike auth-implicit
 ```
 
-`probe` печатает только fingerprint и результат `GET /account/status` + `Client.init()`. Повторный live-запуск `probe` на реальном own-app token в сессии A0 не делался; 401 на этом токене зафиксирован ранее (ТЗ §16).
+`probe` печатает только fingerprint и результат `GET /account/status` + `Client.init()`. Live `probe` 2026-08-22: own-app → 403, official-like → 200.
 
-`auth-implicit` открывает браузер; нужно вставить полный redirect URL с `#access_token=...` (страница редиректит быстро — при необходимости Network throttling в DevTools).
+`auth-implicit` открывает браузер; нужно вставить полный redirect URL с `#access_token=...` (страница редиректит быстро — при необходимости Network throttling в DevTools). **Не вставляйте этот URL в чат** — в нём живой token.
 
-`auth-app` — старый flow своего приложения, для сравнения. На `Client.init()` ожидается 401.
+`auth-app` — старый flow своего приложения, для сравнения. На Music API ожидается HTTP 403 / `UnauthorizedError`.
 
 Выгрузка библиотеки в этом шаге **не делается**: в `get_library_snapshot()` ещё есть баги (`client.me()` и `users_playlists()` без `kind`) — это A1.

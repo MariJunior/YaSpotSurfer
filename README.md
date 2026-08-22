@@ -2,7 +2,9 @@
 
 Локальный Python-spike для миграции музыкальной библиотеки из Яндекс Музыки в Spotify.
 
-Сейчас в репозитории есть только Yandex auth spike (`yandex-spike`). Spotify не подключён. Токен своего OAuth-приложения получает `401` на `Client.init()`; рабочий Music token ещё не подтверждён.
+Сейчас в репозитории есть только Yandex auth spike (`yandex-spike`). Spotify не подключён.
+
+Рабочий путь к Music API: `uv run yandex-spike auth-implicit` (official-like client). Токен своего OAuth-приложения Music API не принимает (HTTP 403). Подробности: [docs/yandex-auth.md](docs/yandex-auth.md).
 
 ## Требования
 
@@ -19,9 +21,9 @@ uv run yandex-spike auth-implicit
 
 `probe` проверяет сохранённые токены на `api.music.yandex.net/account/status` и не печатает секреты.
 
-`auth-implicit` — следующий эксперимент: токен official-like client через браузер (нужно вставить redirect URL с `#access_token=`).
+`auth-implicit` получает Music-совместимый token через браузер (вставьте redirect URL с `#access_token=` только в локальный терминал, не в чат).
 
-Своё OAuth-приложение (`YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` в `.env`) по-прежнему получает token, но Music API отвечает `401`. Подробности: [docs/yandex-auth.md](docs/yandex-auth.md).
+Своё OAuth-приложение (`YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` в `.env`) token получает, но Music API отвечает 403.
 
 Снимок библиотеки в этом шаге не запускается.
 
