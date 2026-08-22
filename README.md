@@ -2,7 +2,7 @@
 
 Локальный Python-spike для миграции музыкальной библиотеки из Яндекс Музыки в Spotify.
 
-Сейчас в репозитории есть только Yandex auth spike (`yandex-spike`). Spotify не подключён.
+Yandex-выгрузка работает (`inspect`). Spotify spike: `yandex-spike spotify-spike` (нужен app в Dashboard).
 
 Рабочий путь к Music API: `uv run yandex-spike auth-implicit` (official-like client). Токен своего OAuth-приложения Music API не принимает (HTTP 403). Подробности: [docs/yandex-auth.md](docs/yandex-auth.md).
 
@@ -35,6 +35,16 @@ uv run yandex-spike inspect
 ```
 
 Пишет `.data/library-snapshot.json` и `.data/raw/`. Токены и write-запросы к Яндексу не используются.
+
+## Spotify
+
+Создайте app в [Developer Dashboard](https://developer.spotify.com/dashboard), Redirect URI: `http://127.0.0.1:8766/callback`. Нужен Spotify Premium у владельца app (Dev Mode 2026). Заполните `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` в `.env`.
+
+```bash
+uv run yandex-spike spotify-spike
+```
+
+Подробности: [docs/spotify-spike.md](docs/spotify-spike.md).
 
 ## Секреты
 

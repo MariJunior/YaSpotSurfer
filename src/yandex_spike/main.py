@@ -4,6 +4,7 @@ import argparse
 import json
 
 from .inspector import SNAPSHOT_FILE, inspect_library
+from .spotify import run_spotify_spike
 from .yandex import (
     OFFICIAL_LIKE_CLIENT_ID,
     TOKEN_FILE_APP,
@@ -160,6 +161,29 @@ def cmd_inspect() -> None:
     print("Raw:      .data/raw/")
 
 
+def cmd_spotify_spike() -> None:
+    print("Spotify spike")
+    print("-" * 40)
+    print()
+    print("Токены не печатаются. Тестовый плейлист удаляется в конце.")
+    print()
+
+    result = run_spotify_spike()
+    print(f"user_id:       {result['user_id']}")
+    print(f"display_name:  {result['display_name']}")
+    print(f"search:        {result['search_query']}")
+    print(
+        f"track:         {result['track_artists']} — {result['track_name']} "
+        f"({result['track_id']})"
+    )
+    print(f"track_isrc:    {result['track_isrc']}")
+    print(f"playlist_id:   {result['playlist_id']}")
+    print(f"added:         {result['added']}")
+    print(f"cleanup_ok:    {result['cleanup_ok']} (HTTP {result['cleanup_http']})")
+    if result["cleanup_excerpt"]:
+        print(f"cleanup excerpt: {result['cleanup_excerpt']}")
+
+
 def cmd_oauth_app_info() -> None:
     print("Публичный паспорт official-like OAuth app")
     print("-" * 40)
@@ -189,6 +213,7 @@ def main() -> None:
             "auth-implicit",
             "auth-app",
             "inspect",
+            "spotify-spike",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
     )
@@ -204,5 +229,7 @@ def main() -> None:
         cmd_auth_implicit()
     elif args.command == "auth-app":
         cmd_auth_app()
-    else:
+    elif args.command == "inspect":
         cmd_inspect()
+    else:
+        cmd_spotify_spike()
