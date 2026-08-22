@@ -46,6 +46,13 @@ uv run yandex-spike spotify-spike
 
 Подробности: [docs/spotify-spike.md](docs/spotify-spike.md).
 
+Доменная модель и нормализация (без matching): [docs/domain.md](docs/domain.md).
+
+```bash
+uv run yandex-spike normalize-preview
+uv run python -m unittest tests.test_normalization
+```
+
 ## Секреты
 
 Не коммитьте `.env` и файлы в `.data/` (токен Яндекса, будущие снимки). Они уже в `.gitignore`.

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
+from .application.normalize_preview import preview_liked_tracks
+from .infrastructure.file_store import save_tracks
 from .inspector import SNAPSHOT_FILE, inspect_library
 from .spotify import run_spotify_spike
 from .yandex import (
@@ -180,8 +183,30 @@ def cmd_spotify_spike() -> None:
     print(f"playlist_id:   {result['playlist_id']}")
     print(f"added:         {result['added']}")
     print(f"cleanup_ok:    {result['cleanup_ok']} (HTTP {result['cleanup_http']})")
+    print(f"cleanup_uris:  {result['cleanup_uris']}")
     if result["cleanup_excerpt"]:
         print(f"cleanup excerpt: {result['cleanup_excerpt']}")
+
+
+def cmd_normalize_preview() -> None:
+    print("Normalize preview")
+    print("-" * 40)
+    print()
+    print("Токены и write-запросы не используются. Нужен inspect-snapshot.")
+    print()
+
+    tracks = preview_liked_tracks(SNAPSHOT_FILE, limit=20)
+    preview_path = Path(".data") / "normalized-preview.json"
+    save_tracks(preview_path, tracks)
+
+    print(f"Треков в превью: {len(tracks)}")
+    for track in tracks:
+        artists = ", ".join(artist.name for artist in track.artists)
+        tags = ",".join(track.version_tags) if track.version_tags else "-"
+        print(f"   {artists} — {track.title}")
+        print(f"      → {track.normalized_title}  tags={tags}")
+    print()
+    print(f"JSON: {preview_path}")
 
 
 def cmd_oauth_app_info() -> None:
@@ -214,6 +239,7 @@ def main() -> None:
             "auth-app",
             "inspect",
             "spotify-spike",
+            "normalize-preview",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
     )
@@ -231,5 +257,7 @@ def main() -> None:
         cmd_auth_app()
     elif args.command == "inspect":
         cmd_inspect()
-    else:
+    elif args.command == "spotify-spike":
         cmd_spotify_spike()
+    else:
+        cmd_normalize_preview()

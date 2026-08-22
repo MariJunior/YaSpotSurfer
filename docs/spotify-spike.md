@@ -24,7 +24,9 @@ SPOTIFY_CLIENT_SECRET=
 uv run yandex-spike spotify-spike
 ```
 
-Делает: OAuth → `GET /me` → search 1 трека → `POST /me/playlists` → `POST /playlists/{id}/items` → cleanup `DELETE /me/library`.
+Делает: OAuth → `GET /me` → search 1 трека → `POST /me/playlists` → `POST /playlists/{id}/items` → cleanup `DELETE /me/library?uris=...`.
+
+Live 2026-08-22: cleanup с JSON body дал HTTP 400 `Missing required field: uris`. Актуальный [Remove Items from Library](https://developer.spotify.com/documentation/web-api/reference/remove-library-items) ждёт **query** `uris`. Несколько URI шлём по одному: `requests` кодирует запятую как `%2C`. Старые `YaSpotSurfer spike test` ищем через `GET /me/playlists` с пагинацией.
 
 Токен: `.data/spotify-token.json` (не коммитить). Access token короткоживущий — spike умеет refresh.
 
@@ -36,7 +38,7 @@ uv run yandex-spike spotify-spike
 | поиск | `GET /search` limit ≤ 10 |
 | создать плейлист | `POST /me/playlists` (не `/users/{id}/playlists`) |
 | добавить трек | `POST /playlists/{id}/items` (не `/tracks`) |
-| убрать тестовый плейлист | `DELETE /me/library` с `spotify:playlist:...` |
+| убрать тестовый плейлист | `DELETE /me/library?uris=spotify:playlist:...` (query, не JSON body) |
 
 Search-запрос: `track:Lullaby artist:The Cure`. Если Spotify отдаст `external_ids.isrc` — это плюс для matching (с Яндекса ISRC нет).
 

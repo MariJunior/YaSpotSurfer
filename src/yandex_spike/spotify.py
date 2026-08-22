@@ -267,6 +267,63 @@ def _api(
     ) from last_error
 
 
+def _unfollow_library_uris(
+    access_token: str,
+    uris: list[str],
+) -> requests.Response:
+    """DELETE /me/library: uris — query string, по одному, без JSON body.
+
+    Docs: comma-separated query. requests.urlencode кодирует запятую как %2C,
+    поэтому несколько URI в одном параметре ломаются. По одному URI безопаснее.
+    """
+    last: requests.Response | None = None
+    for uri in uris:
+        last = _api(
+            "DELETE",
+            "/me/library",
+            access_token,
+            params={"uris": uri},
+        )
+        if last.status_code not in (200, 204):
+            return last
+    if last is None:
+        raise RuntimeError("unfollow: пустой список URI")
+    return last
+
+
+def _find_test_playlist_uris(access_token: str) -> list[str]:
+    """Старые spike-плейлисты после прошлого 400 cleanup. Пагинация: limit 10."""
+    uris: list[str] = []
+    offset = 0
+    page_size = 10
+    # Запас: личная библиотека Spotify редко больше пары сотен плейлистов.
+    max_offset = 200
+
+    while offset <= max_offset:
+        response = _api(
+            "GET",
+            "/me/playlists",
+            access_token,
+            params={"limit": page_size, "offset": offset},
+        )
+        if response.status_code != 200:
+            break
+
+        payload = response.json()
+        items = payload.get("items") or []
+        for item in items:
+            if item.get("name") == TEST_PLAYLIST_NAME:
+                uri = item.get("uri") or f"spotify:playlist:{item.get('id')}"
+                uris.append(uri)
+
+        total = payload.get("total")
+        offset += len(items)
+        if not items or (total is not None and offset >= total):
+            break
+
+    return uris
+
+
 def run_spotify_spike() -> dict:
     """Search → create private playlist → add 1 track → unfollow via /me/library."""
     access_token = authenticate()
@@ -317,13 +374,10 @@ def run_spotify_spike() -> dict:
     )
     add_response.raise_for_status()
 
-    # Feb 2026 Dev Mode: unfollow через generic library, не /followers.
-    cleanup_response = _api(
-        "DELETE",
-        "/me/library",
-        access_token,
-        json_body={"uris": [playlist_uri]},
-    )
+    leftover_uris = _find_test_playlist_uris(access_token)
+    # Текущий тестовый плейлист тоже в список — unfollow одним запросом.
+    all_cleanup = list(dict.fromkeys([*leftover_uris, playlist_uri]))
+    cleanup_response = _unfollow_library_uris(access_token, all_cleanup)
     cleanup_ok = cleanup_response.status_code in (200, 204)
     cleanup_status = cleanup_response.status_code
     if not cleanup_ok:
@@ -346,4 +400,5 @@ def run_spotify_spike() -> dict:
         "cleanup_ok": cleanup_ok,
         "cleanup_http": cleanup_status,
         "cleanup_excerpt": cleanup_excerpt,
+        "cleanup_uris": len(all_cleanup),
     }
