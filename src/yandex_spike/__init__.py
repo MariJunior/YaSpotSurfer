@@ -4,9 +4,9 @@
 
 - ``domain`` — Track, нормализация, matching. Без HTTP.
 - ``application`` — сценарии (dry-run, review, write) и порты.
-- ``infrastructure`` — Yandex Music, Spotify Web API, JSON в ``.data/``.
+- ``infrastructure`` — Yandex Music, Spotify Web API, SQLite бота, JSON в ``.data/``.
 - CLI (``main``) — парсинг аргументов и I/O файлов.
-- Telegram (``telegram``) — хендлеры; B1 без вызовов музыки.
+- Telegram (``telegram``) — хендлеры; B2: аккаунт в SQLite, без вызовов музыки.
 
 Правило matching: неверный auto-match хуже пропуска. LLM в matching нет.
 """
