@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import uuid
 from pathlib import Path
 
 from .application.dry_run import run_dry_run
+from .application.migrate import migrate_liked_tracks
 from .application.match_preview import preview_self_match
 from .application.normalize_preview import preview_liked_tracks
 from .infrastructure.file_store import save_tracks
+from .infrastructure.spotify.library import SpotifyLibraryWriter
 from .infrastructure.spotify.searcher import SpotifySearcher
 from .infrastructure.yandex.mapper import track_from_yandex_snapshot
 from .inspector import SNAPSHOT_FILE, inspect_library
@@ -306,6 +309,99 @@ def cmd_migrate_dry_run(*, limit: int, resume: bool) -> None:
     print(f"State:  {state_path}")
 
 
+def cmd_migrate(*, limit: int, resume: bool) -> None:
+    print("Migrate liked tracks")
+    print("-" * 40)
+    print()
+    print("Пишет в Spotify только exact / high-confidence.")
+    print("review и not-found пропускаются. Повтор не дублирует лайки.")
+    print()
+
+    if not SNAPSHOT_FILE.exists():
+        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike inspect")
+
+    dry_state_path = Path(".data") / "dry-run-state.json"
+    if not dry_state_path.exists():
+        raise RuntimeError(
+            "Нет dry-run-state.json. Сначала: "
+            f"uv run yandex-spike migrate-dry-run --limit {limit}"
+        )
+
+    snapshot = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
+    items = snapshot.get("liked_tracks") or []
+    tracks = [track_from_yandex_snapshot(item) for item in items[:limit]]
+    processed = json.loads(dry_state_path.read_text(encoding="utf-8")).get(
+        "processed"
+    ) or {}
+
+    match_rows = []
+    missing = []
+    for track in tracks:
+        row = processed.get(track.id)
+        if row is None:
+            missing.append(track.id)
+        else:
+            match_rows.append(row)
+    if missing:
+        raise RuntimeError(
+            f"Нет dry-run для {len(missing)} треков. "
+            f"Сначала: uv run yandex-spike migrate-dry-run --limit {limit}"
+        )
+
+    write_path = Path(".data") / "migrate-state.json"
+    write_state = {}
+    migration_id = str(uuid.uuid4())
+    if resume and write_path.exists():
+        saved = json.loads(write_path.read_text(encoding="utf-8"))
+        write_state = saved.get("write_state") or {}
+        migration_id = saved.get("migration_id") or migration_id
+        print(f"Resume: migration_id={migration_id}, уже {len(write_state)} записей.")
+
+    access_token = authenticate_spotify()
+    writer = SpotifyLibraryWriter(access_token)
+    report = migrate_liked_tracks(
+        match_rows,
+        writer,
+        write_state=write_state,
+        migration_id=migration_id,
+    )
+
+    write_path.write_text(
+        json.dumps(
+            {
+                "migration_id": report["migration_id"],
+                "write_state": report["write_state"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    public_report = {
+        key: value for key, value in report.items() if key != "write_state"
+    }
+    report_path = Path(".data") / "migrate-report.json"
+    report_path.write_text(
+        json.dumps(public_report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    counts = report["counts"]
+    print(f"Треков:    {report['track_count']}")
+    print(f"saved:     {counts.get('saved', 0)}")
+    print(f"already:   {counts.get('already', 0)}")
+    print(f"skipped:   {counts.get('skipped', 0)}")
+    print()
+    for row in report["results"]:
+        print(
+            f"   {row['write_status']:8} {row.get('title')} → "
+            f"{row.get('spotify_title') or '-'}"
+        )
+    print()
+    print(f"Report: {report_path}")
+    print(f"State:  {write_path}")
+
+
 def cmd_oauth_app_info() -> None:
     print("Публичный паспорт official-like OAuth app")
     print("-" * 40)
@@ -339,6 +435,7 @@ def main() -> None:
             "normalize-preview",
             "match-preview",
             "migrate-dry-run",
+            "migrate",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
     )
@@ -346,12 +443,12 @@ def main() -> None:
         "--limit",
         type=int,
         default=20,
-        help="Для migrate-dry-run: сколько лайков прогнать (не вся библиотека).",
+        help="Для migrate / dry-run: сколько лайков (не вся библиотека).",
     )
     parser.add_argument(
         "--resume",
         action="store_true",
-        help="Для migrate-dry-run: пропустить уже записанные в dry-run-state.json.",
+        help="Пропустить уже обработанные id в state-файле.",
     )
     args = parser.parse_args()
 
@@ -373,5 +470,7 @@ def main() -> None:
         cmd_normalize_preview()
     elif args.command == "match-preview":
         cmd_match_preview()
-    else:
+    elif args.command == "migrate-dry-run":
         cmd_migrate_dry_run(limit=args.limit, resume=args.resume)
+    else:
+        cmd_migrate(limit=args.limit, resume=args.resume)

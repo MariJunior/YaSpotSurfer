@@ -52,10 +52,11 @@ uv run yandex-spike spotify-spike
 uv run yandex-spike normalize-preview
 uv run yandex-spike match-preview
 uv run yandex-spike migrate-dry-run --limit 20
-uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run
+uv run yandex-spike migrate --limit 20
+uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate
 ```
 
-Dry-run не пишет в Spotify. Подробности: [docs/dry-run.md](docs/dry-run.md).
+`migrate-dry-run` не пишет в Spotify. `migrate` пишет лайки только для exact/high-confidence. Подробности: [docs/dry-run.md](docs/dry-run.md), [docs/migrate.md](docs/migrate.md).
 
 ## Секреты
 
