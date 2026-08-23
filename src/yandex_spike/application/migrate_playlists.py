@@ -54,9 +54,10 @@ def playlist_migration_entry(
     *,
     yandex_kind: int,
     yandex_title: str,
-    spotify_playlist_id: str,
+    spotify_playlist_id: str | None,
     spotify_playlist_name: str,
     migrate_report: dict[str, Any],
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Публичная строка отчёта без write_state."""
     return {
@@ -64,7 +65,29 @@ def playlist_migration_entry(
         "yandex_title": yandex_title,
         "spotify_playlist_id": spotify_playlist_id,
         "spotify_playlist_name": spotify_playlist_name,
+        "dry_run": dry_run,
         "track_count": migrate_report.get("track_count"),
         "counts": migrate_report.get("counts") or {},
         "results": migrate_report.get("results") or [],
+    }
+
+
+def merge_playlist_reports(
+    previous: dict[str, Any] | None,
+    entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Не затирает прошлые kind: 105 и 1063 живут в одном файле."""
+    by_kind: dict[int, dict[str, Any]] = {}
+    for item in (previous or {}).get("playlists") or []:
+        kind = item.get("yandex_kind")
+        if kind is not None:
+            by_kind[int(kind)] = item
+    for entry in entries:
+        by_kind[int(entry["yandex_kind"])] = entry
+    playlists = list(by_kind.values())
+    return {
+        "wrote_to_spotify": any(not item.get("dry_run") for item in playlists),
+        "dest": "yandex-playlists",
+        "playlist_count": len(playlists),
+        "playlists": playlists,
     }

@@ -131,6 +131,38 @@ class MatchingTests(unittest.TestCase):
         self.assertIsNotNone(result.selected)
         self.assertEqual(len(result.candidates), 1)
 
+    def test_missing_duration_reaches_auto_at_090(self) -> None:
+        source = _track(
+            {
+                "sourceId": "hawaii-src",
+                "title": "He Mele Lahui Hawaii",
+                "artists": [{"name": "The Rose Ensemble"}],
+            }
+        )
+        candidate = _track(
+            {
+                "sourceId": "hawaii-dst",
+                "title": "He Mele Lahui Hawaii",
+                "durationMs": 161346,
+                "artists": [{"name": "The Rose Ensemble"}],
+                "album": {"title": "Na Mele Hawaii"},
+            }
+        )
+        result = match_track(source, [candidate])
+        self.assertIsNotNone(result.selected)
+        self.assertGreaterEqual(result.selected.score, 0.90)
+        self.assertIn(result.status, AUTO_STATUSES)
+
+    def test_version_cap_stays_below_auto(self) -> None:
+        config = MatchConfig()
+        self.assertLess(config.version_cap(), config.auto_threshold)
+        self.assertEqual(config.auto_threshold, 0.90)
+
+    def test_hard_duration_miss_is_not_auto(self) -> None:
+        result, _ = self._run_case("different-duration")
+        self.assertEqual(result.status, "review")
+        self.assertLess(result.selected.score, MatchConfig().auto_threshold)
+
     def test_artist_drops_gruppa_prefix(self) -> None:
         source = _track(
             {

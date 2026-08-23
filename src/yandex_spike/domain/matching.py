@@ -25,13 +25,17 @@ class MatchConfig:
     artist_weight: float = 0.30
     album_weight: float = 0.15
     duration_weight: float = 0.10
-    auto_threshold: float = 0.92
+    auto_threshold: float = 0.90
     review_threshold: float = 0.70
     duration_full_ms: int = 2000
     duration_zero_ms: int = 15000
     ambiguous_delta: float = 0.03
-    # Несовместимые версии нельзя отправить в auto, даже при score 0.99.
-    version_auto_cap: float = 0.919
+    # Должен быть < auto_threshold, иначе remaster/live уедут в auto.
+    version_auto_cap: float = 0.899
+
+    def version_cap(self) -> float:
+        """Несовместимые версии всегда ниже auto, даже если порог сдвинули."""
+        return min(self.version_auto_cap, round(self.auto_threshold - 0.001, 4))
 
 
 def _ratio(left: str, right: str) -> float:
@@ -192,7 +196,10 @@ def score_candidate(
     )
     # wrong match > missing: remaster/live/remix не проходят auto-порог.
     if not version_ok:
-        score = min(score, config.version_auto_cap)
+        score = min(score, config.version_cap())
+    # Обе длительности известны и расходятся ≥15с — часто другая запись.
+    if duration == 0.0:
+        score = min(score, config.version_cap())
 
     return MatchCandidate(
         track=candidate,

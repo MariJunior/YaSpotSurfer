@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from yandex_spike.application.migrate_playlists import (
+    merge_playlist_reports,
     playlist_migration_entry,
     sandbox_playlist_name,
     select_playlist_headers,
@@ -62,6 +63,20 @@ class PlaylistSelectTests(unittest.TestCase):
         self.assertNotIn("write_state", entry)
         self.assertEqual(entry["spotify_playlist_id"], "abc")
         self.assertEqual(entry["counts"]["saved"], 2)
+
+    def test_merge_reports_keeps_previous_kind(self) -> None:
+        previous = {
+            "playlists": [
+                {"yandex_kind": 105, "yandex_title": "кино"},
+            ]
+        }
+        merged = merge_playlist_reports(
+            previous,
+            [{"yandex_kind": 1063, "yandex_title": "помонтируем?"}],
+        )
+        kinds = {item["yandex_kind"] for item in merged["playlists"]}
+        self.assertEqual(kinds, {105, 1063})
+        self.assertEqual(merged["playlist_count"], 2)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from pathlib import Path
 from .application.dry_run import run_dry_run
 from .application.migrate import migrate_liked_tracks
 from .application.migrate_playlists import (
+    merge_playlist_reports,
     playlist_migration_entry,
     sandbox_playlist_name,
     select_playlist_headers,
@@ -29,6 +30,7 @@ from .inspector import (
     connect_music_client,
     fetch_playlist_with_tracks,
     inspect_library,
+    load_cached_playlist,
 )
 from .spotify import authenticate as authenticate_spotify
 from .spotify import run_spotify_spike
@@ -43,6 +45,14 @@ from .yandex import (
     probe_token_file,
     probe_yandex_id,
 )
+
+
+def _print_match_progress(index: int, total: int, row: dict) -> None:
+    selected = (row.get("selected") or {}).get("title") or "-"
+    print(
+        f"   {index}/{total} {row.get('status', '-'):16} "
+        f"{row.get('title')} → {selected}"
+    )
 
 
 def _print_probe(result: dict) -> None:
@@ -295,7 +305,12 @@ def cmd_migrate_dry_run(*, limit: int, resume: bool) -> None:
 
     access_token = authenticate_spotify()
     searcher = SpotifySearcher(access_token)
-    report = run_dry_run(tracks, searcher, processed=processed)
+    report = run_dry_run(
+        tracks,
+        searcher,
+        processed=processed,
+        on_progress=_print_match_progress,
+    )
 
     report_path = Path(".data") / "dry-run-report.json"
     state_path.write_text(
@@ -320,11 +335,6 @@ def cmd_migrate_dry_run(*, limit: int, resume: bool) -> None:
         f"not_found={tz_counts['not_found']}"
     )
     print(f"wrote_to_spotify: {report['wrote_to_spotify']}")
-    print()
-    for row in report["results"][:12]:
-        selected = row.get("selected") or {}
-        target = selected.get("title") or "-"
-        print(f"   {row['status']:16} {row['title']} → {target}")
     print()
     print(f"Report: {report_path}")
     print(f"State:  {state_path}")
@@ -397,33 +407,16 @@ def cmd_migrate(
     if not SNAPSHOT_FILE.exists():
         raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike inspect")
 
-    dry_state_path = Path(".data") / "dry-run-state.json"
-    if not dry_state_path.exists():
-        raise RuntimeError(
-            "Нет dry-run-state.json. Сначала: "
-            f"uv run yandex-spike migrate-dry-run --limit {limit}"
-        )
-
     snapshot = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
     items = snapshot.get("liked_tracks") or []
     tracks = [track_from_yandex_snapshot(item) for item in items[:limit]]
-    processed = json.loads(dry_state_path.read_text(encoding="utf-8")).get(
-        "processed"
-    ) or {}
 
-    match_rows = []
-    missing = []
-    for track in tracks:
-        row = processed.get(track.id)
-        if row is None:
-            missing.append(track.id)
-        else:
-            match_rows.append(row)
-    if missing:
-        raise RuntimeError(
-            f"Нет dry-run для {len(missing)} треков. "
-            f"Сначала: uv run yandex-spike migrate-dry-run --limit {limit}"
-        )
+    dry_state_path = Path(".data") / "dry-run-state.json"
+    processed = {}
+    if dry_state_path.exists():
+        processed = json.loads(dry_state_path.read_text(encoding="utf-8")).get(
+            "processed"
+        ) or {}
 
     write_path = Path(".data") / f"migrate-state-{dest}.json"
     # Старый A6 checkpoint лайков.
@@ -440,6 +433,24 @@ def cmd_migrate(
         print(f"Resume: migration_id={migration_id}, уже {len(write_state)} записей.")
 
     access_token = authenticate_spotify()
+    searcher = SpotifySearcher(access_token)
+    dry_report = run_dry_run(
+        tracks,
+        searcher,
+        processed=processed,
+        on_progress=_print_match_progress,
+    )
+    dry_state_path.parent.mkdir(parents=True, exist_ok=True)
+    dry_state_path.write_text(
+        json.dumps(
+            {"processed": dry_report["processed"]},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    match_rows = [dry_report["processed"][track.id] for track in tracks]
+
     if dest == "library":
         writer: SpotifyLibraryWriter | PlaylistTrackSink = SpotifyLibraryWriter(
             access_token
@@ -499,13 +510,17 @@ def cmd_migrate_playlists(
     resume: bool,
     kind: int | None,
     track_limit: int,
+    dry_run: bool,
 ) -> None:
     print("Migrate playlists")
     print("-" * 40)
     print()
     print("Отдельный Spotify playlist «YaSpotSurfer: <имя Яндекса>».")
     print("Лайки и общий sandbox лайков не трогает.")
-    print("Пишет только exact / high-confidence и review --accept.")
+    if dry_run:
+        print("DRY-RUN: search + match, Spotify playlist не создаём.")
+    else:
+        print("Пишет только exact / high-confidence и review --accept.")
     print()
 
     if track_limit < 1:
@@ -528,11 +543,11 @@ def cmd_migrate_playlists(
         dry_payload = json.loads(dry_state_path.read_text(encoding="utf-8"))
         dry_payload.setdefault("processed", {})
 
-    print("Подключаюсь к Яндексу за треками выбранных плейлистов...")
-    yandex_client = connect_music_client()
+    print("Подключаюсь к Яндексу только если нет кэша плейлиста...")
+    yandex_client = None
     access_token = authenticate_spotify()
     searcher = SpotifySearcher(access_token)
-    spotify = SpotifyPlaylistClient(access_token)
+    spotify = None if dry_run else SpotifyPlaylistClient(access_token)
 
     entries: list[dict] = []
     for header in selected:
@@ -543,12 +558,22 @@ def cmd_migrate_playlists(
             f"(kind={yandex_kind}, в snapshot {header.get('track_count')} треков, "
             f"берём ≤{track_limit})"
         )
-        detail = fetch_playlist_with_tracks(
-            yandex_kind,
-            client=yandex_client,
-            uid=header.get("uid"),
-            track_limit=track_limit,
-        )
+        try:
+            if yandex_client is None and load_cached_playlist(
+                yandex_kind,
+                uid=header.get("uid"),
+                track_limit=track_limit,
+            ) is None:
+                yandex_client = connect_music_client()
+            detail = fetch_playlist_with_tracks(
+                yandex_kind,
+                client=yandex_client,
+                uid=header.get("uid"),
+                track_limit=track_limit,
+            )
+        except RuntimeError as exc:
+            print(f"   пропуск этого плейлиста: {exc}")
+            continue
         tracks = [
             track_from_yandex_snapshot(item) for item in (detail.get("tracks") or [])
         ]
@@ -560,9 +585,34 @@ def cmd_migrate_playlists(
             tracks,
             searcher,
             processed=dry_payload.get("processed") or {},
+            on_progress=_print_match_progress,
         )
         dry_payload["processed"] = dry_report["processed"]
         match_rows = [dry_report["processed"][track.id] for track in tracks]
+        dest_name = sandbox_playlist_name(detail.get("title") or title)
+
+        if dry_run:
+            entry = playlist_migration_entry(
+                yandex_kind=yandex_kind,
+                yandex_title=detail.get("title") or title,
+                spotify_playlist_id=None,
+                spotify_playlist_name=dest_name,
+                migrate_report={
+                    "track_count": dry_report["track_count"],
+                    "counts": dry_report["counts"],
+                    "results": dry_report["results"],
+                },
+                dry_run=True,
+            )
+            entries.append(entry)
+            counts = dry_report["counts"]
+            print(
+                f"   dry-run exact={counts.get('exact', 0)} "
+                f"high-confidence={counts.get('high-confidence', 0)} "
+                f"review={counts.get('review', 0)} "
+                f"not-found={counts.get('not-found', 0)}"
+            )
+            continue
 
         write_path = Path(".data") / f"migrate-state-yandex-pl-{yandex_kind}.json"
         write_state: dict = {}
@@ -576,7 +626,7 @@ def cmd_migrate_playlists(
                 f"уже {len(write_state)} записей."
             )
 
-        dest_name = sandbox_playlist_name(detail.get("title") or title)
+        assert spotify is not None
         playlist_id = spotify.find_or_create(dest_name)
         print(f"   Spotify: {playlist_id}  «{dest_name}»")
         writer = PlaylistTrackSink(spotify, playlist_id)
@@ -625,17 +675,12 @@ def cmd_migrate_playlists(
         encoding="utf-8",
     )
     report_path = Path(".data") / "migrate-report-playlists.json"
+    previous = None
+    if report_path.exists():
+        previous = json.loads(report_path.read_text(encoding="utf-8"))
+    merged = merge_playlist_reports(previous, entries)
     report_path.write_text(
-        json.dumps(
-            {
-                "wrote_to_spotify": True,
-                "dest": "yandex-playlists",
-                "playlist_count": len(entries),
-                "playlists": entries,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
+        json.dumps(merged, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     print()
@@ -724,6 +769,11 @@ def main() -> None:
         default=10,
         help="migrate-playlists: максимум треков в одном плейлисте (не весь гигант).",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="migrate: только search. migrate-playlists: без создания Spotify playlist.",
+    )
     parser.add_argument("--accept", help="review: принять selected для source_id")
     parser.add_argument("--skip", help="review: пропустить source_id")
     args = parser.parse_args()
@@ -749,7 +799,9 @@ def main() -> None:
         cmd_normalize_preview()
     elif args.command == "match-preview":
         cmd_match_preview()
-    elif args.command == "migrate-dry-run":
+    elif args.command == "migrate-dry-run" or (
+        args.command == "migrate" and args.dry_run
+    ):
         cmd_migrate_dry_run(limit=args.limit, resume=args.resume)
     elif args.command == "review":
         cmd_review(accept=args.accept, skip=args.skip)
@@ -759,6 +811,7 @@ def main() -> None:
             resume=args.resume,
             kind=args.kind,
             track_limit=args.track_limit,
+            dry_run=args.dry_run,
         )
     else:
         cmd_migrate(

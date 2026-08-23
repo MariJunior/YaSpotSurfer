@@ -14,7 +14,7 @@ uv run yandex-spike migrate-dry-run --limit 20
 uv run yandex-spike migrate-dry-run --limit 40 --resume
 ```
 
-По умолчанию **20** лайков, не вся библиотека (~4000 search — это A7, с паузами).
+По умолчанию **20** лайков. Репетиция A7: `--limit 50`. Вся библиотека (~4000 search) — не CLI, а бот (B).
 
 Write-методов порт `MusicCatalogSearcher` не содержит. `wrote_to_spotify` в отчёте всегда `false`.
 

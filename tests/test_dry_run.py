@@ -83,6 +83,41 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual(report["results"][0]["status"], "review")
         self.assertTrue(report["resumed"])
 
+    def test_reclassify_cached_review_to_auto(self) -> None:
+        source = track_from_yandex_snapshot(
+            {
+                "sourceId": "hawaii",
+                "title": "He Mele",
+                "artists": [{"name": "The Rose Ensemble"}],
+            }
+        )
+        cached = {
+            source.id: {
+                "source_id": source.id,
+                "title": "He Mele",
+                "status": "review",
+                "score": 0.905,
+                "selected": {"id": "spotify:abc", "title": "He Mele"},
+                "candidates": [
+                    {
+                        "id": "spotify:abc",
+                        "score": 0.905,
+                        "reasons": {
+                            "title": 1.0,
+                            "artist": 1.0,
+                            "album": 0.7,
+                            "duration": 0.5,
+                            "version": 1.0,
+                        },
+                    }
+                ],
+            }
+        }
+        searcher = FakeSearcher({})
+        report = run_dry_run([source], searcher, processed=cached)
+        self.assertEqual(report["results"][0]["status"], "high-confidence")
+        self.assertEqual(searcher.calls, [])
+
     def test_empty_search_is_not_found(self) -> None:
         source = track_from_yandex_snapshot(
             {"sourceId": "3", "title": "Unknown", "artists": [{"name": "Nobody"}]}

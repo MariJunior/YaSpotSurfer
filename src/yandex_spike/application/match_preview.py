@@ -64,7 +64,7 @@ def preview_self_match(
         selected_id = row["selected_id"]
         if result.status in {"exact", "high-confidence"} and selected_id != track.id:
             wrong_auto.append(track.id)
-        # Self всегда score 1.0. Второй кандидат ≥ 0.92 — возможный дубль или риск.
+        # Self всегда score 1.0. Второй кандидат ≥ auto — возможный дубль или риск.
         others = [
             candidate
             for candidate in result.candidates

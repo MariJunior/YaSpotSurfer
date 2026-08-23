@@ -7,6 +7,7 @@ from typing import Any
 
 from yandex_music import Client, Track
 
+from .infrastructure.yandex.network import call_yandex
 from .yandex import DATA_DIR, TOKEN_FILE_MUSIC, load_token
 
 RAW_DIR = DATA_DIR / "raw"
@@ -15,6 +16,8 @@ SNAPSHOT_FILE = DATA_DIR / "library-snapshot.json"
 TRACK_BATCH_SIZE = 100
 SAMPLE_PLAYLIST_COUNT = 2
 BATCH_PAUSE_SEC = 0.15
+# Библиотека по умолчанию ждёт 5с — через VPN handshake часто не успевает.
+YANDEX_TIMEOUT_SEC = 20
 
 
 def _write_json(path: Path, data: Any) -> None:
@@ -34,7 +37,8 @@ def connect_music_client() -> Client:
         )
 
     client = Client(token_data["access_token"])
-    client.init()
+    client.request.set_timeout(YANDEX_TIMEOUT_SEC)
+    call_yandex("account/status", client.init)
     return client
 
 
@@ -84,13 +88,90 @@ def _normalize_track(track: Track) -> dict[str, Any]:
     }
 
 
+def _normalize_track_dict(raw: dict[str, Any]) -> dict[str, Any]:
+    """Тот же снимок, что _normalize_track, но из Track.to_dict() в кэше raw."""
+    # TrackShort в playlist.tracks кладёт полную модель вложенно в "track".
+    if "title" not in raw and isinstance(raw.get("track"), dict):
+        raw = raw["track"]
+    albums = raw.get("albums") or []
+    album = albums[0] if albums else None
+    artists = raw.get("artists") or []
+    isrc_values = _find_isrc_values(raw)
+    track_id = raw.get("id")
+    if track_id is None:
+        track_id = raw.get("track_id") or raw.get("sourceId")
+    return {
+        "source": "yandex",
+        "sourceId": str(track_id or ""),
+        "title": raw.get("title"),
+        "version": raw.get("version"),
+        "durationMs": raw.get("duration_ms") if "duration_ms" in raw else raw.get("durationMs"),
+        "available": raw.get("available"),
+        "artists": [
+            {"id": artist.get("id"), "name": artist.get("name")}
+            for artist in artists
+            if isinstance(artist, dict)
+        ],
+        "album": (
+            {
+                "id": album.get("id"),
+                "title": album.get("title"),
+                "year": album.get("year"),
+            }
+            if isinstance(album, dict)
+            else None
+        ),
+        "isrc": isrc_values[0] if isrc_values else None,
+    }
+
+
+def _playlist_raw_path(kind: int, uid: int | None) -> Path | None:
+    if uid is not None:
+        path = RAW_DIR / f"playlist-{uid}-{kind}.json"
+        if path.exists():
+            return path
+    matches = list(RAW_DIR.glob(f"playlist-*-{kind}.json"))
+    if not matches:
+        return None
+    matches.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    return matches[0]
+
+
+def load_cached_playlist(
+    kind: int,
+    *,
+    uid: int | None = None,
+    track_limit: int | None = None,
+) -> dict[str, Any] | None:
+    """Уже скачанный raw — без нового запроса к Яндексу (VPN его часто роняет)."""
+    path = _playlist_raw_path(kind, uid)
+    if path is None:
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    raw_tracks = payload.get("tracks") or []
+    if not raw_tracks:
+        return None
+    if track_limit is not None:
+        raw_tracks = raw_tracks[:track_limit]
+    playlist = payload.get("playlist") or {}
+    return {
+        "uid": playlist.get("uid") if playlist.get("uid") is not None else uid,
+        "kind": playlist.get("kind") if playlist.get("kind") is not None else kind,
+        "title": playlist.get("title"),
+        "track_count": playlist.get("track_count"),
+        "playlist_uuid": playlist.get("playlist_uuid"),
+        "tracks": [_normalize_track_dict(item) for item in raw_tracks],
+        "from_cache": True,
+    }
+
+
 def _fetch_tracks_batched(client: Client, track_ids: list[str]) -> list[Track]:
     tracks: list[Track] = []
     total = len(track_ids)
 
     for start in range(0, total, TRACK_BATCH_SIZE):
         chunk = track_ids[start : start + TRACK_BATCH_SIZE]
-        tracks.extend(client.tracks(chunk))
+        tracks.extend(call_yandex("tracks", client.tracks, chunk))
         done = min(start + TRACK_BATCH_SIZE, total)
         print(f"   треки {done}/{total}")
         if done < total:
@@ -117,13 +198,26 @@ def fetch_playlist_with_tracks(
     track_limit: int | None = None,
 ) -> dict[str, Any]:
     """Полные треки одного плейлиста Яндекса. Не выгружает все 51."""
+    cached = load_cached_playlist(kind, uid=uid, track_limit=track_limit)
+    if cached:
+        print(f"   кэш {RAW_DIR.name}/playlist-*-{kind}.json, Яндекс не зовём")
+        return cached
+
     music_client = client or connect_music_client()
     # Второй аргумент — owner id; без него live тоже работал, но дока marshalx так надёжнее.
-    full = (
-        music_client.users_playlists(kind, uid)
-        if uid is not None
-        else music_client.users_playlists(kind)
-    )
+    if uid is not None:
+        full = call_yandex(
+            f"playlist kind={kind}",
+            music_client.users_playlists,
+            kind,
+            uid,
+        )
+    else:
+        full = call_yandex(
+            f"playlist kind={kind}",
+            music_client.users_playlists,
+            kind,
+        )
     if isinstance(full, list):
         full = full[0] if full else None
     if full is None:
