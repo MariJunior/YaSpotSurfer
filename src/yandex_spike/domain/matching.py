@@ -1,3 +1,5 @@
+"""Детерминированный matching. Кандидаты приходят снаружи (search)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,6 +23,12 @@ _TAG_ALIASES = {
 
 @dataclass(frozen=True)
 class MatchConfig:
+    """Веса ТЗ и пороги. Неверный auto хуже пропуска.
+
+    ``version_auto_cap`` обязан быть строго ниже ``auto_threshold``, иначе
+    remaster/live попадут в запись. ``version_cap()`` это гарантирует.
+    """
+
     title_weight: float = 0.45
     artist_weight: float = 0.30
     album_weight: float = 0.15
@@ -30,7 +38,6 @@ class MatchConfig:
     duration_full_ms: int = 2000
     duration_zero_ms: int = 15000
     ambiguous_delta: float = 0.03
-    # Должен быть < auto_threshold, иначе remaster/live уедут в auto.
     version_auto_cap: float = 0.899
 
     def version_cap(self) -> float:

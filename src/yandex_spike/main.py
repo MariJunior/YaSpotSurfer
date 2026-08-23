@@ -1,3 +1,5 @@
+"""CLI: аргументы, файлы, печать. Правила matching живут в domain."""
+
 from __future__ import annotations
 
 import argparse
@@ -6,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from .application.dry_run import run_dry_run
-from .application.migrate import migrate_liked_tracks
+from .application.migrate import write_matched_tracks
 from .application.migrate_playlists import (
     merge_playlist_reports,
     playlist_migration_entry,
@@ -25,7 +27,7 @@ from .infrastructure.spotify.playlists import (
 )
 from .infrastructure.spotify.searcher import SpotifySearcher
 from .infrastructure.yandex.mapper import track_from_yandex_snapshot
-from .inspector import (
+from .infrastructure.yandex.library import (
     SNAPSHOT_FILE,
     connect_music_client,
     fetch_playlist_with_tracks,
@@ -170,7 +172,7 @@ def cmd_probe_id() -> None:
 
 
 def cmd_scan() -> None:
-    """A7-имя из ТЗ. Тот же inspect — snapshot для matching и бота."""
+    """Алиас ``inspect``: snapshot для matching, CLI и будущего бота."""
     cmd_inspect()
 
 
@@ -419,7 +421,7 @@ def cmd_migrate(
         ) or {}
 
     write_path = Path(".data") / f"migrate-state-{dest}.json"
-    # Старый A6 checkpoint лайков.
+    # Ранние прогоны писали Liked Songs в migrate-state.json без суффикса dest.
     if dest == "library" and not write_path.exists():
         legacy = Path(".data") / "migrate-state.json"
         if legacy.exists():
@@ -460,7 +462,7 @@ def cmd_migrate(
         resolved_id = playlist_id or client.find_or_create(playlist_name)
         print(f"Плейлист: {resolved_id}")
         writer = PlaylistTrackSink(client, resolved_id)
-    report = migrate_liked_tracks(
+    report = write_matched_tracks(
         match_rows,
         writer,
         write_state=write_state,
@@ -630,7 +632,7 @@ def cmd_migrate_playlists(
         playlist_id = spotify.find_or_create(dest_name)
         print(f"   Spotify: {playlist_id}  «{dest_name}»")
         writer = PlaylistTrackSink(spotify, playlist_id)
-        migrate_report = migrate_liked_tracks(
+        migrate_report = write_matched_tracks(
             match_rows,
             writer,
             write_state=write_state,

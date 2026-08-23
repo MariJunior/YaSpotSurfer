@@ -37,8 +37,7 @@ def track_from_yandex_snapshot(payload: dict[str, Any]) -> Track:
             ),
         )
 
-    # Live inspect: ISRC в модели Track нет, поле почти всегда None.
-    # Remaster/live часто в отдельном version, не в title.
+    # Live inspect: в модели Track нет isrc. Remaster/live часто в version, не в title.
     version = payload.get("version")
     version_tags = tuple(
         dict.fromkeys(
@@ -63,7 +62,7 @@ def track_from_yandex_snapshot(payload: dict[str, Any]) -> Track:
 
 
 def playlist_from_yandex_snapshot(payload: dict[str, Any]) -> Playlist:
-    """Заголовок плейлиста из inspect. Треки подтянет A4/A5, не A3."""
+    """Заголовок плейлиста. Состав треков — ``fetch_playlist_with_tracks``, не snapshot."""
     kind = payload.get("kind")
     source_id = str(kind if kind is not None else payload.get("playlist_uuid") or "")
     return Playlist(

@@ -1,3 +1,5 @@
+"""Доменные сущности. Без импортов yandex_music / requests."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,7 +23,11 @@ class AlbumRef:
 
 @dataclass(frozen=True)
 class Track:
-    """Провайдер-независимый трек. raw не участвует в matching."""
+    """Провайдер-независимый трек.
+
+    ``id`` — ``yandex:{sourceId}`` или ``spotify:{id}``.
+    ``raw`` в matching и JSON-store не участвует.
+    """
 
     id: str
     title: str

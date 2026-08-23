@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from yandex_spike.application.migrate import migrate_liked_tracks
+from yandex_spike.application.migrate import write_matched_tracks
 from yandex_spike.application.spotify_uri import to_track_uri
 
 
@@ -54,7 +54,7 @@ class MigrateTests(unittest.TestCase):
                 "selected": {"id": "spotify:ccc", "title": "C"},
             },
         ]
-        report = migrate_liked_tracks(rows, writer, migration_id="mig-1")
+        report = write_matched_tracks(rows, writer, migration_id="mig-1")
         self.assertEqual(writer.saved, ["spotify:track:aaa", "spotify:track:ccc"])
         self.assertEqual(report["counts"]["saved"], 2)
         self.assertEqual(report["counts"]["skipped"], 1)
@@ -69,7 +69,7 @@ class MigrateTests(unittest.TestCase):
                 "selected": {"id": "spotify:aaa", "title": "A"},
             }
         ]
-        report = migrate_liked_tracks(rows, writer, migration_id="mig-1")
+        report = write_matched_tracks(rows, writer, migration_id="mig-1")
         self.assertEqual(writer.saved, [])
         self.assertEqual(report["results"][0]["write_status"], "already")
 
@@ -90,7 +90,7 @@ class MigrateTests(unittest.TestCase):
                 "selected": {"id": "spotify:aaa", "title": "A"},
             }
         ]
-        report = migrate_liked_tracks(
+        report = write_matched_tracks(
             rows, writer, write_state=cached, migration_id="mig-1"
         )
         self.assertEqual(writer.contains_calls, [])
@@ -115,7 +115,7 @@ class MigrateTests(unittest.TestCase):
                 "selected": {"id": "spotify:zzz", "title": "Z"},
             },
         ]
-        report = migrate_liked_tracks(rows, writer, migration_id="mig-2")
+        report = write_matched_tracks(rows, writer, migration_id="mig-2")
         self.assertEqual(writer.saved, ["spotify:track:bbb"])
         self.assertEqual(report["counts"]["skipped"], 1)
 

@@ -1,3 +1,9 @@
+"""OAuth и probe Яндекса. Выгрузка библиотеки — ``infrastructure.yandex.library``.
+
+Свой OAuth app получает token, но Music API отвечает 403.
+Рабочий путь: implicit с official-like ``client_id`` (см. docs/yandex-auth.md).
+"""
+
 from __future__ import annotations
 
 import json
@@ -440,5 +446,5 @@ def authenticate_implicit() -> dict:
     }
 
 
-# Выгрузка библиотеки — inspect_library() в inspector.py (A1).
-# Старый snapshot вызывал client.me() и users_playlists() без kind — оба вызова неверные.
+# Выгрузка — ``infrastructure.yandex.library.inspect_library``.
+# Не вызывать ``client.me()`` как метод и ``users_playlists()`` без kind.

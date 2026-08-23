@@ -36,7 +36,7 @@ def track_from_spotify_search(payload: dict[str, Any]) -> Track:
         )
 
     source_id = payload.get("id") or ""
-    # У Spotify ISRC есть; у Яндекса в A1 его не было. Matching начнёт не с ISRC.
+    # У Spotify ISRC обычно есть; у Яндекса в snapshot его почти никогда нет.
     isrc = (payload.get("external_ids") or {}).get("isrc")
     return Track(
         id=f"spotify:{source_id}",

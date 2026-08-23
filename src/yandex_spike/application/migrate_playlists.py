@@ -1,13 +1,14 @@
+"""Песочница плейлистов Яндекса: имя Spotify и выбор коротких kind."""
+
 from __future__ import annotations
 
 from typing import Any
 
-# Префикс, чтобы копии Яндекса не смешались с будущим боевым переносом в боте.
 PLAYLIST_SANDBOX_PREFIX = "YaSpotSurfer: "
 
 
 def sandbox_playlist_name(yandex_title: str) -> str:
-    """Имя Spotify-песочницы для одного плейлиста Яндекса."""
+    """``YaSpotSurfer: <имя>``, чтобы не смешать с будущим боевым плейлистом в боте."""
     title = (yandex_title or "").strip() or "untitled"
     return f"{PLAYLIST_SANDBOX_PREFIX}{title}"
 

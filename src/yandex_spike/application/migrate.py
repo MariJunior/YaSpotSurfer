@@ -1,9 +1,12 @@
+"""Запись уже сматченных треков. Не вызывает search."""
+
 from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any
 
+from yandex_spike.application.ports import LibraryWriter
 from yandex_spike.application.spotify_uri import to_track_uri
 
 AUTO_STATUSES = frozenset({"exact", "high-confidence"})
@@ -11,7 +14,7 @@ DONE_WRITES = frozenset({"saved", "already"})
 
 
 def is_writable(match: dict[str, Any]) -> bool:
-    """review можно принять вручную; skip важнее статуса matching."""
+    """Auto (exact / high-confidence) или ручной accept. skip всегда сильнее."""
     if match.get("decision") == "skip":
         return False
     if match.get("decision") == "accept" and match.get("selected"):
@@ -19,22 +22,14 @@ def is_writable(match: dict[str, Any]) -> bool:
     return match.get("status") in AUTO_STATUSES and bool(match.get("selected"))
 
 
-class LibraryWriter(Protocol):
-    def contains(self, uri: str) -> bool:
-        ...
-
-    def save(self, uri: str) -> None:
-        ...
-
-
-def migrate_liked_tracks(
+def write_matched_tracks(
     match_rows: list[dict[str, Any]],
     writer: LibraryWriter,
     *,
     write_state: dict[str, dict[str, Any]] | None = None,
     migration_id: str,
 ) -> dict[str, Any]:
-    """Пишет только auto-match. review/not-found не трогает. Повтор — contains."""
+    """Пишет только writable-строки. Повтор: checkpoint, затем ``contains``."""
     done = dict(write_state or {})
     rows: list[dict[str, Any]] = []
 

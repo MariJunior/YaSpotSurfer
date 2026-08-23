@@ -25,7 +25,7 @@ class SpotifyPlaylistClient:
             json_body={
                 "name": name,
                 "public": False,
-                "description": "YaSpotSurfer A7 sandbox. Safe to delete.",
+                "description": "YaSpotSurfer rehearsal playlist. Safe to delete.",
             },
         )
         if self._pause_sec:

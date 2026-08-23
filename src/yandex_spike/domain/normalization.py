@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""Нормализация title/artist: теги версии отдельно, original не схлопываем."""
 
 import re
 import unicodedata

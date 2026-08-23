@@ -1,3 +1,5 @@
+"""Домен: сущности, нормализация, matching. Без HTTP."""
+
 from .entities import (
     AlbumRef,
     ArtistRef,

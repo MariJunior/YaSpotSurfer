@@ -1,3 +1,5 @@
+"""Очередь ручного review: accept пишет трек, skip — нет."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -17,6 +19,7 @@ def apply_decision(
     source_id: str,
     decision: str,
 ) -> dict[str, Any]:
+    """Пишет ``accept`` / ``skip`` в строку dry-run. Меняет ``processed`` на месте."""
     if decision not in {"accept", "skip"}:
         raise ValueError("decision: accept или skip")
     row = processed.get(source_id)

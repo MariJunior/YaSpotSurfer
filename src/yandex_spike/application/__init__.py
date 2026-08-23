@@ -1,13 +1,11 @@
-from .ports import (
-    MigrationStore,
-    MusicCatalogSearcher,
-    MusicCatalogWriter,
-    MusicLibraryReader,
-)
+"""Сценарии миграции: matching pipeline без знания Spotify/Yandex HTTP."""
+
+from .migrate import is_writable, write_matched_tracks
+from .ports import LibraryWriter, MusicCatalogSearcher
 
 __all__ = [
-    "MigrationStore",
+    "LibraryWriter",
     "MusicCatalogSearcher",
-    "MusicCatalogWriter",
-    "MusicLibraryReader",
+    "is_writable",
+    "write_matched_tracks",
 ]

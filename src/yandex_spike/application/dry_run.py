@@ -1,3 +1,5 @@
+"""Search + match без записи в Spotify. Кэш dry-run пересчитывает status при смене порога."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

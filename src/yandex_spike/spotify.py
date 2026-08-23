@@ -1,3 +1,5 @@
+"""OAuth и HTTP к Spotify Web API (Dev Mode 2026)."""
+
 from __future__ import annotations
 
 import base64
@@ -28,7 +30,7 @@ AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 API_BASE = "https://api.spotify.com/v1"
 
-# Минимум для A2 + запас на A6, чтобы не гонять consent повторно.
+# Search, playlists, Liked Songs — один consent, без повторного логина.
 SCOPES = " ".join(
     [
         "user-read-private",
@@ -367,7 +369,7 @@ def run_spotify_spike() -> dict:
         json_body={
             "name": TEST_PLAYLIST_NAME,
             "public": False,
-            "description": "Temporary YaSpotSurfer A2 spike. Safe to delete.",
+            "description": "Temporary YaSpotSurfer OAuth smoke playlist. Safe to delete.",
         },
     )
     create_response.raise_for_status()

@@ -1,42 +1,24 @@
+"""Порты application-слоя. Реализации — в infrastructure, не наоборот."""
+
 from __future__ import annotations
 
 from typing import Protocol
 
-from yandex_spike.domain.entities import ArtistRef, Playlist, Track
-
-
-class MusicLibraryReader(Protocol):
-    def get_liked_tracks(self) -> list[Track]:
-        ...
-
-    def get_playlists(self) -> list[Playlist]:
-        ...
-
-    def get_playlist_tracks(self, playlist_id: str) -> list[Track]:
-        ...
-
-    def get_liked_artists(self) -> list[ArtistRef]:
-        ...
+from yandex_spike.domain.entities import Track
 
 
 class MusicCatalogSearcher(Protocol):
-    """Только поиск. Dry-run не должен видеть write-методы."""
+    """Поиск кандидатов. Dry-run не должен видеть write-методы."""
 
     def search_track(self, track: Track) -> list[Track]:
         ...
 
 
-class MusicCatalogWriter(MusicCatalogSearcher, Protocol):
-    def save_liked_tracks(self, tracks: list[Track]) -> None:
+class LibraryWriter(Protocol):
+    """Запись одного URI: Liked Songs или items плейлиста — один контракт."""
+
+    def contains(self, uri: str) -> bool:
         ...
 
-    def create_playlist(self, title: str, tracks: list[Track]) -> Playlist:
-        ...
-
-
-class MigrationStore(Protocol):
-    def save_tracks(self, tracks: list[Track]) -> None:
-        ...
-
-    def load_tracks(self) -> list[Track]:
+    def save(self, uri: str) -> None:
         ...

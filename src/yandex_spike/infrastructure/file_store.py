@@ -70,7 +70,7 @@ def load_tracks(path: Path) -> list[Track]:
 
 
 class FileMigrationStore:
-    """MigrationStore на JSON-файлах. Без БД до A6."""
+    """Локальный JSON-checkpoint. БД появится в боте, не в CLI."""
 
     def __init__(self, tracks_path: Path) -> None:
         self._tracks_path = tracks_path
