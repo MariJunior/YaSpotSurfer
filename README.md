@@ -35,7 +35,7 @@ Spotify Dev Mode (2026) и неофициальный Music API Яндекса �
 
 ## В разработке
 
-**Этап B — Telegram-бот (Python).** Те же сценарии, что CLI: connect Yandex / Spotify, scan, dry-run, review, миграция в **реальную** медиатеку, прогресс и отчёт.
+**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Код бота ещё не начат.
 
 CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
 
@@ -127,6 +127,7 @@ uv run python -m unittest tests.test_normalization tests.test_matching tests.tes
 | Песочница vs лайки, VPN | [docs/a7-cli.md](docs/a7-cli.md) |
 | Matching и пороги | [docs/matching.md](docs/matching.md) |
 | Домен и слои | [docs/domain.md](docs/domain.md) |
+| Telegram-бот (ТЗ) | [docs/telegram-bot.md](docs/telegram-bot.md) |
 | Яндекс auth | [docs/yandex-auth.md](docs/yandex-auth.md) |
 | Spotify spike | [docs/spotify-spike.md](docs/spotify-spike.md) |
 
