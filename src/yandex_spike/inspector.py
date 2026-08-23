@@ -109,6 +109,50 @@ def _playlist_header(playlist: Any) -> dict[str, Any]:
     }
 
 
+def fetch_playlist_with_tracks(
+    kind: int,
+    *,
+    client: Client | None = None,
+    uid: int | None = None,
+    track_limit: int | None = None,
+) -> dict[str, Any]:
+    """Полные треки одного плейлиста Яндекса. Не выгружает все 51."""
+    music_client = client or connect_music_client()
+    # Второй аргумент — owner id; без него live тоже работал, но дока marshalx так надёжнее.
+    full = (
+        music_client.users_playlists(kind, uid)
+        if uid is not None
+        else music_client.users_playlists(kind)
+    )
+    if isinstance(full, list):
+        full = full[0] if full else None
+    if full is None:
+        raise RuntimeError(f"Яндекс не вернул плейлист kind={kind}")
+
+    shorts = list(full.tracks or [])
+    if track_limit is not None:
+        shorts = shorts[:track_limit]
+    track_ids = [
+        item.track_id for item in shorts if getattr(item, "track_id", None)
+    ]
+    full_tracks = (
+        _fetch_tracks_batched(music_client, track_ids) if track_ids else []
+    )
+
+    raw_name = f"playlist-{full.uid}-{full.kind}.json"
+    _write_json(
+        RAW_DIR / raw_name,
+        {
+            "playlist": full.to_dict(),
+            "tracks": [track.to_dict() for track in full_tracks],
+        },
+    )
+    return {
+        **_playlist_header(full),
+        "tracks": [_normalize_track(track) for track in full_tracks],
+    }
+
+
 def inspect_library() -> dict[str, Any]:
     print("Подключаюсь к Music API...")
     client = connect_music_client()

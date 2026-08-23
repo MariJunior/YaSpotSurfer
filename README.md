@@ -53,7 +53,8 @@ uv run yandex-spike normalize-preview
 uv run yandex-spike match-preview
 uv run yandex-spike migrate-dry-run --limit 20
 uv run yandex-spike migrate --limit 20
-uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate
+uv run yandex-spike migrate-playlists --limit 1
+uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists
 ```
 
 `migrate-dry-run` не пишет в Spotify. `migrate` по умолчанию пишет в плейлист-песочницу, не в лайки. Живая медиатека — для бота (B). Подробности: [docs/a7-cli.md](docs/a7-cli.md).

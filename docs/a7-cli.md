@@ -10,7 +10,8 @@
 
 | Этап | Куда пишем | Зачем |
 |------|------------|--------|
-| A7 сейчас | плейлист `YaSpotSurfer sandbox` (`--dest playlist`) | гонять matching, review, resume |
+| A7 лайки | плейлист `YaSpotSurfer sandbox` (`--dest playlist`) | гонять matching, review, resume |
+| A7 плейлисты | `YaSpotSurfer: <имя Яндекса>` (`migrate-playlists`) | копия короткого плейлиста, не лайки |
 | A7 явно | `--dest library` | только если снова нужны лайки |
 | B бот | твоя реальная медиатека | окончательная синхронизация |
 
@@ -27,11 +28,15 @@ uv run yandex-spike review --skip yandex:SOME_ID
 uv run yandex-spike migrate --limit 20
 uv run yandex-spike migrate --limit 20 --playlist-id PLAYLIST_ID
 uv run yandex-spike migrate --limit 20 --dest library
+uv run yandex-spike migrate-playlists --limit 1
+uv run yandex-spike migrate-playlists --kind 1063 --track-limit 10
 ```
 
 `scan` = `inspect` (snapshot). `migrate` без `--dest` пишет в **песочницу**, не в Liked Songs.
 
-Плейлисты Яндекса → отдельные Spotify playlist — следующий кусок A7. Сейчас песочница принимает те же 20 auto-match лайков.
+`migrate-playlists` берёт самые короткие непустые плейлисты Яндекса (или один `--kind` из snapshot) и пишет каждый в **свой** Spotify playlist `YaSpotSurfer: <имя>`. Лайки не трогает. `--limit` здесь — число плейлистов, `--track-limit` (по умолчанию 10) режет гигантов. Matching кэшируется в том же `.data/dry-run-state.json`, что и лайки: `review` увидит новые спорные треки.
+
+Если create даёт 403 «unavailable in this country» — VPN (после Грузии Spotify с российского IP часто так отвечает) или создай плейлист руками с тем же именем.
 
 ## Как проверить A7
 
@@ -40,4 +45,6 @@ uv run yandex-spike migrate --limit 20 --dest library
    (то же имя) или `migrate --playlist-id <id>`. Лайки при этом не пишутся.
 2. Повтор `--resume` → `already`.
 3. `review` — очередь; accept/skip меняют dry-run-state, следующий migrate уважает решение.
-4. Песочницу можно удалить руками. Лайки A6 не откатываем автоматически.
+4. `migrate-playlists --limit 1` — в Spotify появится `YaSpotSurfer: <имя самого короткого>`.
+   Повтор с `--resume` → `already`. Песочницу плейлиста можно удалить руками.
+5. Песочницу лайков (`YaSpotSurfer sandbox`) тоже можно удалить руками. Лайки A6 не откатываем автоматически.

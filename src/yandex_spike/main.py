@@ -7,6 +7,11 @@ from pathlib import Path
 
 from .application.dry_run import run_dry_run
 from .application.migrate import migrate_liked_tracks
+from .application.migrate_playlists import (
+    playlist_migration_entry,
+    sandbox_playlist_name,
+    select_playlist_headers,
+)
 from .application.review import apply_decision, list_review_queue
 from .application.match_preview import preview_self_match
 from .application.normalize_preview import preview_liked_tracks
@@ -19,7 +24,12 @@ from .infrastructure.spotify.playlists import (
 )
 from .infrastructure.spotify.searcher import SpotifySearcher
 from .infrastructure.yandex.mapper import track_from_yandex_snapshot
-from .inspector import SNAPSHOT_FILE, inspect_library
+from .inspector import (
+    SNAPSHOT_FILE,
+    connect_music_client,
+    fetch_playlist_with_tracks,
+    inspect_library,
+)
 from .spotify import authenticate as authenticate_spotify
 from .spotify import run_spotify_spike
 from .yandex import (
@@ -483,6 +493,157 @@ def cmd_migrate(
     print(f"State:  {write_path}")
 
 
+def cmd_migrate_playlists(
+    *,
+    limit: int,
+    resume: bool,
+    kind: int | None,
+    track_limit: int,
+) -> None:
+    print("Migrate playlists")
+    print("-" * 40)
+    print()
+    print("Отдельный Spotify playlist «YaSpotSurfer: <имя Яндекса>».")
+    print("Лайки и общий sandbox лайков не трогает.")
+    print("Пишет только exact / high-confidence и review --accept.")
+    print()
+
+    if track_limit < 1:
+        raise RuntimeError("--track-limit должен быть >= 1")
+    if not SNAPSHOT_FILE.exists():
+        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike inspect")
+
+    snapshot = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
+    selected = select_playlist_headers(
+        snapshot.get("playlists") or [],
+        limit=limit,
+        kind=kind,
+    )
+    if not selected:
+        raise RuntimeError("В snapshot нет непустых плейлистов.")
+
+    dry_state_path = Path(".data") / "dry-run-state.json"
+    dry_payload: dict = {"processed": {}}
+    if dry_state_path.exists():
+        dry_payload = json.loads(dry_state_path.read_text(encoding="utf-8"))
+        dry_payload.setdefault("processed", {})
+
+    print("Подключаюсь к Яндексу за треками выбранных плейлистов...")
+    yandex_client = connect_music_client()
+    access_token = authenticate_spotify()
+    searcher = SpotifySearcher(access_token)
+    spotify = SpotifyPlaylistClient(access_token)
+
+    entries: list[dict] = []
+    for header in selected:
+        yandex_kind = int(header["kind"])
+        title = header.get("title") or ""
+        print(
+            f"Плейлист Яндекса: «{title}» "
+            f"(kind={yandex_kind}, в snapshot {header.get('track_count')} треков, "
+            f"берём ≤{track_limit})"
+        )
+        detail = fetch_playlist_with_tracks(
+            yandex_kind,
+            client=yandex_client,
+            uid=header.get("uid"),
+            track_limit=track_limit,
+        )
+        tracks = [
+            track_from_yandex_snapshot(item) for item in (detail.get("tracks") or [])
+        ]
+        if not tracks:
+            print("   пустой после fetch — пропуск")
+            continue
+
+        dry_report = run_dry_run(
+            tracks,
+            searcher,
+            processed=dry_payload.get("processed") or {},
+        )
+        dry_payload["processed"] = dry_report["processed"]
+        match_rows = [dry_report["processed"][track.id] for track in tracks]
+
+        write_path = Path(".data") / f"migrate-state-yandex-pl-{yandex_kind}.json"
+        write_state: dict = {}
+        migration_id = str(uuid.uuid4())
+        if resume and write_path.exists():
+            saved = json.loads(write_path.read_text(encoding="utf-8"))
+            write_state = saved.get("write_state") or {}
+            migration_id = saved.get("migration_id") or migration_id
+            print(
+                f"   Resume: migration_id={migration_id}, "
+                f"уже {len(write_state)} записей."
+            )
+
+        dest_name = sandbox_playlist_name(detail.get("title") or title)
+        playlist_id = spotify.find_or_create(dest_name)
+        print(f"   Spotify: {playlist_id}  «{dest_name}»")
+        writer = PlaylistTrackSink(spotify, playlist_id)
+        migrate_report = migrate_liked_tracks(
+            match_rows,
+            writer,
+            write_state=write_state,
+            migration_id=migration_id,
+        )
+        write_path.write_text(
+            json.dumps(
+                {
+                    "migration_id": migrate_report["migration_id"],
+                    "yandex_kind": yandex_kind,
+                    "spotify_playlist_id": playlist_id,
+                    "write_state": migrate_report["write_state"],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        entry = playlist_migration_entry(
+            yandex_kind=yandex_kind,
+            yandex_title=detail.get("title") or title,
+            spotify_playlist_id=playlist_id,
+            spotify_playlist_name=dest_name,
+            migrate_report=migrate_report,
+        )
+        entries.append(entry)
+        counts = entry["counts"]
+        print(
+            f"   saved={counts.get('saved', 0)} "
+            f"already={counts.get('already', 0)} "
+            f"skipped={counts.get('skipped', 0)}"
+        )
+        for row in entry["results"]:
+            print(
+                f"      {row['write_status']:8} {row.get('title')} → "
+                f"{row.get('spotify_title') or '-'}"
+            )
+
+    dry_state_path.parent.mkdir(parents=True, exist_ok=True)
+    dry_state_path.write_text(
+        json.dumps(dry_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    report_path = Path(".data") / "migrate-report-playlists.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "wrote_to_spotify": True,
+                "dest": "yandex-playlists",
+                "playlist_count": len(entries),
+                "playlists": entries,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print()
+    print(f"Report: {report_path}")
+    print(f"Dry-run cache: {dry_state_path}")
+    print("review смотрит тот же dry-run-state (новые review из плейлистов).")
+
+
 def cmd_oauth_app_info() -> None:
     print("Публичный паспорт official-like OAuth app")
     print("-" * 40)
@@ -519,14 +680,18 @@ def main() -> None:
             "migrate-dry-run",
             "review",
             "migrate",
+            "migrate-playlists",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
     )
     parser.add_argument(
         "--limit",
         type=int,
-        default=20,
-        help="Для migrate / dry-run: сколько лайков (не вся библиотека).",
+        default=None,
+        help=(
+            "migrate / dry-run: сколько лайков (по умолчанию 20). "
+            "migrate-playlists: сколько плейлистов (по умолчанию 1, сначала короткие)."
+        ),
     )
     parser.add_argument(
         "--resume",
@@ -548,9 +713,23 @@ def main() -> None:
         "--playlist-id",
         help="Уже существующий Spotify playlist id, без create.",
     )
+    parser.add_argument(
+        "--kind",
+        type=int,
+        help="migrate-playlists: конкретный kind плейлиста Яндекса из snapshot.",
+    )
+    parser.add_argument(
+        "--track-limit",
+        type=int,
+        default=10,
+        help="migrate-playlists: максимум треков в одном плейлисте (не весь гигант).",
+    )
     parser.add_argument("--accept", help="review: принять selected для source_id")
     parser.add_argument("--skip", help="review: пропустить source_id")
     args = parser.parse_args()
+    # Общий --limit: для лайков 20, для плейлистов 1 — чтобы не создать 20 копий случайно.
+    if args.limit is None:
+        args.limit = 1 if args.command == "migrate-playlists" else 20
 
     if args.command == "probe":
         cmd_probe()
@@ -574,6 +753,13 @@ def main() -> None:
         cmd_migrate_dry_run(limit=args.limit, resume=args.resume)
     elif args.command == "review":
         cmd_review(accept=args.accept, skip=args.skip)
+    elif args.command == "migrate-playlists":
+        cmd_migrate_playlists(
+            limit=args.limit,
+            resume=args.resume,
+            kind=args.kind,
+            track_limit=args.track_limit,
+        )
     else:
         cmd_migrate(
             limit=args.limit,
