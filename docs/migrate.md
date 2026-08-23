@@ -1,4 +1,4 @@
-# Migrate liked tracks (A6)
+# Migrate liked tracks
 
 Пишет в Spotify **только** `exact` и `high-confidence` из dry-run. `review` / `not-found` пропускаются.
 

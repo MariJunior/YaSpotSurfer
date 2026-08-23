@@ -1,13 +1,15 @@
-# Domain model (A3)
+# Domain model
 
-Слои внутри пакета `yandex_spike`, без нового package и без БД.
+Слои внутри пакета `yandex_spike`:
 
 ```text
-presentation  CLI (main.py)
-application   порты + preview
-domain        Track / Playlist / MatchResult, нормализация
-infrastructure  Yandex/Spotify mappers, JSON file store
+CLI (main.py)          парсинг, файлы, печать
+application            dry-run, review, write_matched_tracks, порты
+domain                 Track, нормализация, matching — без HTTP
+infrastructure         Yandex library/mappers, Spotify search/write, JSON
 ```
+
+OAuth остаётся в `yandex.py` / `spotify.py` (исторические адаптеры). Выгрузка библиотеки — `infrastructure.yandex.library`.
 
 Домен не импортирует `yandex_music` и Spotify HTTP.
 
@@ -15,7 +17,7 @@ infrastructure  Yandex/Spotify mappers, JSON file store
 
 - `Track` — провайдер-независимый трек. `provider_ids` — кортеж пар `(provider, id)`. `raw` в matching не участвует и в JSON-store не пишется.
 - `ArtistRef`, `AlbumRef`, `Playlist`
-- `MatchCandidate`, `MatchResult` — результат `match_track` (A4). Подробности: [matching.md](matching.md).
+- `MatchCandidate`, `MatchResult` — результат `match_track`. Подробности: [matching.md](matching.md).
 
 Yandex `isrc` из inspect почти всегда `None`. Spotify `isrc` берём из `external_ids`, если search его отдал.
 
@@ -31,7 +33,7 @@ Yandex `isrc` из inspect почти всегда `None`. Spotify `isrc` бер
 - год `19xx`/`20xx` снимается только если тег версии уже найден (заголовок `1999` не трогаем)
 - границы слов: `Olivia` не становится `live`
 
-Формы `Song Name (Remastered 2011)` и `Song Name - 2011 Remaster` дают один и тот же `text`, но разные `version_tags`. Неверный match хуже пропуска — A4 не должен сливать remaster с original только по тексту.
+Формы `Song Name (Remastered 2011)` и `Song Name - 2011 Remaster` дают один и тот же `text`, но разные `version_tags`. Неверный match хуже пропуска — remaster не сливается с original только по тексту.
 
 ## Команда
 

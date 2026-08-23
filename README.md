@@ -1,64 +1,135 @@
 # YaSpotSurfer
 
-Локальный Python-spike для миграции музыкальной библиотеки из Яндекс Музыки в Spotify.
+Миграция **личной** музыкальной библиотеки из Яндекс Музыки в Spotify.
 
-Yandex-выгрузка работает (`inspect`). Spotify spike: `yandex-spike spotify-spike` (нужен app в Dashboard).
+Целевой UX — **Telegram-бот**. Сейчас это локальный Python CLI с тем же пайплайном (`scan` → match → `review` → write): проверяем интеграции и качество matching **до** бота.
 
-Рабочий путь к Music API: `uv run yandex-spike auth-implicit` (official-like client). Токен своего OAuth-приложения Music API не принимает (HTTP 403). Подробности: [docs/yandex-auth.md](docs/yandex-auth.md).
+Правило matching: **неверный auto-match хуже пропуска**. LLM для обычного matching не используется.
+
+Живую медиатеку (~4000 лайков, 51 плейлист) CLI **не** переносит целиком. Репетиция — песочница Spotify и `--limit`. Боевой переезд — этап бота.
+
+## Как это устроено
+
+```text
+CLI (main)  →  application (сценарии + порты)  →  domain (Track, matching)
+                    ↑
+            infrastructure (Yandex / Spotify / .data JSON)
+```
+
+- **domain** — сущности, нормализация, matching. Без HTTP.
+- **application** — dry-run, review, запись; порты `MusicCatalogSearcher` и `LibraryWriter`.
+- **infrastructure** — адаптеры Яндекса и Spotify, JSON в `.data/`.
+- **CLI** — аргументы, файлы, печать. OAuth пока в `yandex.py` / `spotify.py`.
+
+Spotify Dev Mode (2026) и неофициальный Music API Яндекса живут только в адаптерах.
+
+## Возможности сейчас (CLI, этап A)
+
+- Авторизация Яндекса (рабочий путь: implicit, official-like client) и Spotify OAuth
+- Snapshot библиотеки Яндекса (лайки, плейлисты, исполнители, альбомы)
+- Детерминированный matching: auto ≥ 0.90, review ≥ 0.70; remaster/live и жёсткий промах длительности не уходят в auto
+- Dry-run с checkpoint, очередь `review` (`accept` / `skip`), `--resume`
+- Запись лайков в песочницу `YaSpotSurfer sandbox` (медиатека — только с `--dest library`)
+- Копии коротких плейлистов Яндекса в `YaSpotSurfer: <имя>`
+- Ретраи сети: Spotify и Яндекс; raw-кэш плейлистов, если VPN роняет `api.music.yandex.net`
+
+## В разработке
+
+**Этап B — Telegram-бот (Python).** Те же сценарии, что CLI: connect Yandex / Spotify, scan, dry-run, review, миграция в **реальную** медиатеку, прогресс и отчёт.
+
+CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
+
+## Бэклог
+
+Этап **C** (не начинаем, пока нет бота):
+
+- постоянное хранилище (SQLite/Postgres), не только `.data/*.json`
+- web dashboard (единственное место, где может появиться TypeScript)
+- smart playlist sync, дедуп, «мёртвые» плейлисты
 
 ## Требования
 
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/)
+- Spotify app в [Developer Dashboard](https://developer.spotify.com/dashboard), Redirect URI: `http://127.0.0.1:8766/callback`
+- Spotify Premium у владельца app (Dev Mode 2026)
+- VPN часто нужен для Spotify («unavailable in this country»). Тот же VPN может ронять Яндекс — CLI ретраит и умеет читать кэш `.data/raw/`
 
-## Запуск
+## Быстрый старт
 
 ```bash
 uv sync
-uv run yandex-spike probe
+# токен Яндекса (redirect с #access_token= — только в локальный терминал)
 uv run yandex-spike auth-implicit
-```
+uv run yandex-spike probe
 
-`probe` проверяет сохранённые токены на `api.music.yandex.net/account/status` и не печатает секреты.
-
-Официальный Яндекс ID (не Музыка): `uv run yandex-spike probe-id`.  
-Вывод по public API: [docs/yandex-public-api.md](docs/yandex-public-api.md).
-
-`auth-implicit` получает Music-совместимый token через браузер (вставьте redirect URL с `#access_token=` только в локальный терминал, не в чат).
-
-Своё OAuth-приложение (`YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` в `.env`) token получает, но Music API отвечает 403.
-
-Выгрузка библиотеки (нужен Music token):
-
-```bash
-uv run yandex-spike inspect
-```
-
-Пишет `.data/library-snapshot.json` и `.data/raw/`. Токены и write-запросы к Яндексу не используются.
-
-## Spotify
-
-Создайте app в [Developer Dashboard](https://developer.spotify.com/dashboard), Redirect URI: `http://127.0.0.1:8766/callback`. Нужен Spotify Premium у владельца app (Dev Mode 2026). Заполните `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` в `.env`.
-
-```bash
+# Spotify: SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET в .env
 uv run yandex-spike spotify-spike
+
+uv run yandex-spike scan
+uv run yandex-spike migrate-dry-run --limit 20
+uv run yandex-spike review
+uv run yandex-spike migrate --limit 20
 ```
 
-Подробности: [docs/spotify-spike.md](docs/spotify-spike.md).
+`scan` = `inspect`: `.data/library-snapshot.json`. Токены в лог не печатаются.
 
-Доменная модель и нормализация (без matching): [docs/domain.md](docs/domain.md).
+## Команды
+
+### Авторизация и диагностика
+
+| Команда | Что делает |
+|---------|------------|
+| `probe` | Проверяет Yandex tokens на `/account/status`, без секретов в логе |
+| `auth-implicit` | Music-совместимый token через браузер |
+| `auth-app` | Свой OAuth app: token есть, Music API даёт 403 |
+| `probe-id` | Яндекс ID (`login.yandex.ru/info`), не Музыка |
+| `spotify-spike` | OAuth Spotify, search, тестовый плейлист, cleanup |
+
+### Библиотека и matching
+
+| Команда | Что делает |
+|---------|------------|
+| `scan` / `inspect` | Snapshot лайков и плейлистов |
+| `normalize-preview` | 20 лайков → нормализация (без API) |
+| `match-preview` | Offline self-match по snapshot |
+| `migrate-dry-run` / `migrate --dry-run` | Search + match, без записи |
+| `review` | Очередь; `--accept` / `--skip` `yandex:ID` |
+
+### Запись в Spotify
+
+| Команда | Что делает |
+|---------|------------|
+| `migrate` | Auto-match (+ accepted). По умолчанию песочница, не Liked Songs |
+| `migrate-playlists` | Короткие плейлисты Яндекса → отдельные Spotify playlist |
+
+Полезные флаги: `--limit`, `--resume`, `--dest playlist` / `--dest library`, `--playlist-id`, `--kind`, `--track-limit`, `--dry-run`.
+
+Репетиция больше 20 (не вся библиотека):
 
 ```bash
-uv run yandex-spike normalize-preview
-uv run yandex-spike match-preview
-uv run yandex-spike migrate-dry-run --limit 20
-uv run yandex-spike migrate --limit 20
-uv run yandex-spike migrate-playlists --limit 1
-uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists
+uv run yandex-spike migrate --limit 50 --resume
+uv run yandex-spike migrate-playlists --limit 3 --track-limit 10 --resume
 ```
 
-`migrate-dry-run` не пишет в Spotify. `migrate` по умолчанию пишет в плейлист-песочницу, не в лайки. Репетиция: `--limit 50`. Живая медиатека — для бота (B). Подробности: [docs/a7-cli.md](docs/a7-cli.md).
+Тесты:
+
+```bash
+uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network
+```
+
+`tests/__init__.py` обязателен: иначе unittest подхватывает `tests` из `yandex-music`.
+
+## Куда смотреть дальше
+
+| Тема | Документ |
+|------|----------|
+| Песочница vs лайки, VPN | [docs/a7-cli.md](docs/a7-cli.md) |
+| Matching и пороги | [docs/matching.md](docs/matching.md) |
+| Домен и слои | [docs/domain.md](docs/domain.md) |
+| Яндекс auth | [docs/yandex-auth.md](docs/yandex-auth.md) |
+| Spotify spike | [docs/spotify-spike.md](docs/spotify-spike.md) |
 
 ## Секреты
 
-Не коммитьте `.env` и файлы в `.data/` (токен Яндекса, будущие снимки). Они уже в `.gitignore`.
+Не коммитьте `.env` и `.data/` (токены, snapshot). Они в `.gitignore`. Redirect URL с `#access_token=` — только в локальный терминал, не в чат.
