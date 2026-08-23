@@ -6,6 +6,7 @@
 - ``application`` — сценарии (dry-run, review, write) и порты.
 - ``infrastructure`` — Yandex Music, Spotify Web API, JSON в ``.data/``.
 - CLI (``main``) — парсинг аргументов и I/O файлов.
+- Telegram (``telegram``) — хендлеры; B1 без вызовов музыки.
 
 Правило matching: неверный auto-match хуже пропуска. LLM в matching нет.
 """
