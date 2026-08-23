@@ -10,6 +10,15 @@ AUTO_STATUSES = frozenset({"exact", "high-confidence"})
 DONE_WRITES = frozenset({"saved", "already"})
 
 
+def is_writable(match: dict[str, Any]) -> bool:
+    """review можно принять вручную; skip важнее статуса matching."""
+    if match.get("decision") == "skip":
+        return False
+    if match.get("decision") == "accept" and match.get("selected"):
+        return True
+    return match.get("status") in AUTO_STATUSES and bool(match.get("selected"))
+
+
 class LibraryWriter(Protocol):
     def contains(self, uri: str) -> bool:
         ...
@@ -38,7 +47,7 @@ def migrate_liked_tracks(
 
         status = match.get("status")
         selected = match.get("selected")
-        if status not in AUTO_STATUSES or not selected:
+        if not is_writable(match):
             record = {
                 "source_id": source_id,
                 "title": match.get("title"),

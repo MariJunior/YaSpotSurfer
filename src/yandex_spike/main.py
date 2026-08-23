@@ -7,10 +7,16 @@ from pathlib import Path
 
 from .application.dry_run import run_dry_run
 from .application.migrate import migrate_liked_tracks
+from .application.review import apply_decision, list_review_queue
 from .application.match_preview import preview_self_match
 from .application.normalize_preview import preview_liked_tracks
 from .infrastructure.file_store import save_tracks
 from .infrastructure.spotify.library import SpotifyLibraryWriter
+from .infrastructure.spotify.playlists import (
+    SANDBOX_PLAYLIST_NAME,
+    PlaylistTrackSink,
+    SpotifyPlaylistClient,
+)
 from .infrastructure.spotify.searcher import SpotifySearcher
 from .infrastructure.yandex.mapper import track_from_yandex_snapshot
 from .inspector import SNAPSHOT_FILE, inspect_library
@@ -141,6 +147,11 @@ def cmd_probe_id() -> None:
     print(f"HTTP:      {result['http_status']}")
     print(f"has_id:    {result['has_id']}")
     print(f"has_login: {result['has_login']}")
+
+
+def cmd_scan() -> None:
+    """A7-имя из ТЗ. Тот же inspect — snapshot для matching и бота."""
+    cmd_inspect()
 
 
 def cmd_inspect() -> None:
@@ -309,12 +320,68 @@ def cmd_migrate_dry_run(*, limit: int, resume: bool) -> None:
     print(f"State:  {state_path}")
 
 
-def cmd_migrate(*, limit: int, resume: bool) -> None:
-    print("Migrate liked tracks")
+def cmd_review(*, accept: str | None, skip: str | None) -> None:
+    print("Review queue")
     print("-" * 40)
     print()
-    print("Пишет в Spotify только exact / high-confidence.")
-    print("review и not-found пропускаются. Повтор не дублирует лайки.")
+
+    dry_state_path = Path(".data") / "dry-run-state.json"
+    if not dry_state_path.exists():
+        raise RuntimeError("Нет dry-run-state.json. Сначала migrate-dry-run.")
+
+    payload = json.loads(dry_state_path.read_text(encoding="utf-8"))
+    processed = payload.get("processed") or {}
+
+    if accept:
+        row = apply_decision(processed, accept, "accept")
+        payload["processed"] = processed
+        dry_state_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"accept {accept} → {row.get('selected', {}).get('title')}")
+        return
+    if skip:
+        apply_decision(processed, skip, "skip")
+        payload["processed"] = processed
+        dry_state_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"skip {skip}")
+        return
+
+    queue = list_review_queue(processed)
+    open_count = sum(1 for row in queue if not row.get("decision"))
+    print(f"В очереди: {open_count} без решения, всего строк: {len(queue)}")
+    print()
+    for row in queue:
+        selected = row.get("selected") or {}
+        decision = row.get("decision") or "-"
+        print(
+            f"   {row['source_id']}  {decision:6}  {row.get('title')} → "
+            f"{selected.get('title') or '-'}"
+        )
+    if not queue:
+        print("Пусто. Для песочницы достаточно migrate --dest playlist.")
+
+
+def cmd_migrate(
+    *,
+    limit: int,
+    resume: bool,
+    dest: str,
+    playlist_name: str,
+    playlist_id: str | None,
+) -> None:
+    print("Migrate")
+    print("-" * 40)
+    print()
+    if dest == "library":
+        print("DEST=library: пишет лайки в медиатеку.")
+    else:
+        print(f"DEST=playlist: песочница «{playlist_name}», лайки не трогает.")
+    print("Пишет только exact / high-confidence и review --accept.")
     print()
 
     if not SNAPSHOT_FILE.exists():
@@ -348,7 +415,12 @@ def cmd_migrate(*, limit: int, resume: bool) -> None:
             f"Сначала: uv run yandex-spike migrate-dry-run --limit {limit}"
         )
 
-    write_path = Path(".data") / "migrate-state.json"
+    write_path = Path(".data") / f"migrate-state-{dest}.json"
+    # Старый A6 checkpoint лайков.
+    if dest == "library" and not write_path.exists():
+        legacy = Path(".data") / "migrate-state.json"
+        if legacy.exists():
+            write_path = legacy
     write_state = {}
     migration_id = str(uuid.uuid4())
     if resume and write_path.exists():
@@ -358,7 +430,15 @@ def cmd_migrate(*, limit: int, resume: bool) -> None:
         print(f"Resume: migration_id={migration_id}, уже {len(write_state)} записей.")
 
     access_token = authenticate_spotify()
-    writer = SpotifyLibraryWriter(access_token)
+    if dest == "library":
+        writer: SpotifyLibraryWriter | PlaylistTrackSink = SpotifyLibraryWriter(
+            access_token
+        )
+    else:
+        client = SpotifyPlaylistClient(access_token)
+        resolved_id = playlist_id or client.find_or_create(playlist_name)
+        print(f"Плейлист: {resolved_id}")
+        writer = PlaylistTrackSink(client, resolved_id)
     report = migrate_liked_tracks(
         match_rows,
         writer,
@@ -380,7 +460,8 @@ def cmd_migrate(*, limit: int, resume: bool) -> None:
     public_report = {
         key: value for key, value in report.items() if key != "write_state"
     }
-    report_path = Path(".data") / "migrate-report.json"
+    public_report["dest"] = dest
+    report_path = Path(".data") / f"migrate-report-{dest}.json"
     report_path.write_text(
         json.dumps(public_report, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -434,7 +515,9 @@ def main() -> None:
             "spotify-spike",
             "normalize-preview",
             "match-preview",
+            "scan",
             "migrate-dry-run",
+            "review",
             "migrate",
         ),
         help="По умолчанию probe — не трогает snapshot библиотеки.",
@@ -450,6 +533,23 @@ def main() -> None:
         action="store_true",
         help="Пропустить уже обработанные id в state-файле.",
     )
+    parser.add_argument(
+        "--dest",
+        choices=("playlist", "library"),
+        default="playlist",
+        help="migrate: playlist = песочница (по умолчанию), library = лайки.",
+    )
+    parser.add_argument(
+        "--playlist-name",
+        default=SANDBOX_PLAYLIST_NAME,
+        help="Имя песочницы для --dest playlist.",
+    )
+    parser.add_argument(
+        "--playlist-id",
+        help="Уже существующий Spotify playlist id, без create.",
+    )
+    parser.add_argument("--accept", help="review: принять selected для source_id")
+    parser.add_argument("--skip", help="review: пропустить source_id")
     args = parser.parse_args()
 
     if args.command == "probe":
@@ -462,7 +562,7 @@ def main() -> None:
         cmd_auth_implicit()
     elif args.command == "auth-app":
         cmd_auth_app()
-    elif args.command == "inspect":
+    elif args.command in {"inspect", "scan"}:
         cmd_inspect()
     elif args.command == "spotify-spike":
         cmd_spotify_spike()
@@ -472,5 +572,13 @@ def main() -> None:
         cmd_match_preview()
     elif args.command == "migrate-dry-run":
         cmd_migrate_dry_run(limit=args.limit, resume=args.resume)
+    elif args.command == "review":
+        cmd_review(accept=args.accept, skip=args.skip)
     else:
-        cmd_migrate(limit=args.limit, resume=args.resume)
+        cmd_migrate(
+            limit=args.limit,
+            resume=args.resume,
+            dest=args.dest,
+            playlist_name=args.playlist_name,
+            playlist_id=args.playlist_id,
+        )

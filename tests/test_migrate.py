@@ -97,6 +97,28 @@ class MigrateTests(unittest.TestCase):
         self.assertEqual(writer.saved, [])
         self.assertEqual(report["results"][0]["write_status"], "saved")
 
+    def test_review_accept_writes_and_skip_does_not(self) -> None:
+        writer = FakeWriter()
+        rows = [
+            {
+                "source_id": "yandex:2",
+                "title": "B",
+                "status": "review",
+                "decision": "accept",
+                "selected": {"id": "spotify:bbb", "title": "B"},
+            },
+            {
+                "source_id": "yandex:9",
+                "title": "Skip me",
+                "status": "exact",
+                "decision": "skip",
+                "selected": {"id": "spotify:zzz", "title": "Z"},
+            },
+        ]
+        report = migrate_liked_tracks(rows, writer, migration_id="mig-2")
+        self.assertEqual(writer.saved, ["spotify:track:bbb"])
+        self.assertEqual(report["counts"]["skipped"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

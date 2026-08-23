@@ -14,9 +14,9 @@ uv run yandex-spike migrate --limit 20
 uv run yandex-spike migrate --limit 20 --resume
 ```
 
-Это **реальная запись лайков** в аккаунт. Повторный запуск: `GET /me/library/contains` → `already`, повторный PUT не нужен. `--resume` также пропускает id из `.data/migrate-state.json`.
+С A7 `migrate` по умолчанию пишет в плейлист `YaSpotSurfer sandbox`. Лайки: `--dest library`.
 
-Не гоняет всю библиотеку. Плейлисты, артисты, альбомы — следующий шаг (A7), не этот CLI.
+Повтор: contains / треки уже в плейлисте → `already`. Checkpoint: `.data/migrate-state-{dest}.json`.
 
 ## Отчёт
 

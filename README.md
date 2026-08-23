@@ -56,7 +56,7 @@ uv run yandex-spike migrate --limit 20
 uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate
 ```
 
-`migrate-dry-run` не пишет в Spotify. `migrate` пишет лайки только для exact/high-confidence. Подробности: [docs/dry-run.md](docs/dry-run.md), [docs/migrate.md](docs/migrate.md).
+`migrate-dry-run` не пишет в Spotify. `migrate` по умолчанию пишет в плейлист-песочницу, не в лайки. Живая медиатека — для бота (B). Подробности: [docs/a7-cli.md](docs/a7-cli.md).
 
 ## Секреты
 
