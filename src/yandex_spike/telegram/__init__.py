@@ -1,4 +1,4 @@
 """Presentation: Telegram-бот. Тонкий адаптер к application-слою.
 
-B2: /start, /help, /logout; музыка ещё не подключается.
+B3: /start, /help, /connect_spotify, /logout; Яндекс ещё не подключается.
 """

@@ -13,7 +13,7 @@ from yandex_spike.telegram.copy import (
 
 
 def start_keyboard() -> InlineKeyboardMarkup:
-    """Меню /start по ТЗ: connect / scan / help. Connect и scan в B1 — заглушки."""
+    """Меню /start: connect / scan / help."""
     return InlineKeyboardMarkup(
         [
             [
@@ -23,4 +23,11 @@ def start_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton("Собрать список треков", callback_data=CALLBACK_SCAN)],
             [InlineKeyboardButton("Помощь", callback_data=CALLBACK_HELP)],
         ]
+    )
+
+
+def spotify_auth_keyboard(authorize_url: str) -> InlineKeyboardMarkup:
+    """Кнопка-ссылка: Telegram сам откроет браузер."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Открыть Spotify", url=authorize_url)]]
     )

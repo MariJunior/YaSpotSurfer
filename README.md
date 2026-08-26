@@ -2,7 +2,7 @@
 
 Миграция **личной** музыкальной библиотеки из Яндекс Музыки в Spotify.
 
-Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B2 — `/start`, `/help`, `/logout`, SQLite.
+Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B3 — `/start`, `/help`, `/connect_spotify`, `/logout`, SQLite.
 
 Правило matching: **неверный auto-match хуже пропуска**. LLM для обычного matching не используется.
 
@@ -20,7 +20,7 @@ CLI (main) / Telegram  →  application (сценарии + порты)  →  do
 - **application** — dry-run, review, запись; порты `MusicCatalogSearcher` и `LibraryWriter`.
 - **infrastructure** — адаптеры Яндекса и Spotify, JSON в `.data/`.
 - **CLI** — аргументы, файлы, печать. OAuth пока в `yandex.py` / `spotify.py`.
-- **Telegram** — личка, `/start` / `/help` / `/logout`; музыка в хендлерах с B3.
+- **Telegram** — личка, `/start` / `/help` / `/connect_spotify` / `/logout`; Яндекс в хендлерах с B4.
 
 Spotify Dev Mode (2026) и неофициальный Music API Яндекса живут только в адаптерах.
 
@@ -36,7 +36,7 @@ Spotify Dev Mode (2026) и неофициальный Music API Яндекса �
 
 ## В разработке
 
-**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B2: `/start`, `/help`, `/logout`, SQLite с шифрованием ключей (подключение музыки — B3/B4).
+**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B3: Spotify через браузер + localhost callback; Яндекс — B4.
 
 CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
 
@@ -52,7 +52,7 @@ CLI остаётся отладочным контуром. TypeScript на эт
 
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/)
-- Telegram: бот у [@BotFather](https://t.me/BotFather); в `.env` — `TELEGRAM_BOT_TOKEN` и `TOKEN_ENCRYPTION_KEY`
+- Telegram: бот у [@BotFather](https://t.me/BotFather); в `.env` — `TELEGRAM_BOT_TOKEN`, `TOKEN_ENCRYPTION_KEY`, для Spotify ещё `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`
 - Spotify app в [Developer Dashboard](https://developer.spotify.com/dashboard), Redirect URI: `http://127.0.0.1:8766/callback`
 - Spotify Premium у владельца app (Dev Mode 2026)
 - VPN часто нужен для Spotify («unavailable in this country»). Тот же VPN может ронять Яндекс — CLI ретраит и умеет читать кэш `.data/raw/`
@@ -73,7 +73,9 @@ uv run yandex-spike migrate-dry-run --limit 20
 uv run yandex-spike review
 uv run yandex-spike migrate --limit 20
 
-# Telegram (B2): TELEGRAM_BOT_TOKEN и TOKEN_ENCRYPTION_KEY в .env
+# Telegram (B3): TELEGRAM_BOT_TOKEN, TOKEN_ENCRYPTION_KEY,
+# SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (redirect http://127.0.0.1:8766/callback)
+# Не запускай одновременно CLI spotify-spike — тот же порт callback.
 uv run yaspotsurfer-bot
 ```
 
@@ -105,7 +107,7 @@ uv run yaspotsurfer-bot
 
 | Команда | Что делает |
 |---------|------------|
-| `uv run yaspotsurfer-bot` | Polling: `/start`, `/help`, `/logout`. Кнопки «подключить» / «собрать список» пока говорят, что ещё не готовы |
+| `uv run yaspotsurfer-bot` | Polling + localhost Spotify callback: `/start`, `/help`, `/connect_spotify`, `/logout`. Яндекс и «собрать список» ещё не готовы |
 
 ### Запись в Spotify
 
@@ -126,7 +128,7 @@ uv run yandex-spike migrate-playlists --limit 3 --track-limit 10 --resume
 Тесты:
 
 ```bash
-uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network tests.test_telegram_copy tests.test_bot_users
+uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network tests.test_telegram_copy tests.test_bot_users tests.test_spotify_connect
 ```
 
 `tests/__init__.py` обязателен: иначе unittest подхватывает `tests` из `yandex-music`.

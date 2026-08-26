@@ -1,4 +1,4 @@
-"""Хендлеры: личка, статус из SQLite, /logout. Без HTTP к Яндексу/Spotify."""
+"""Хендлеры: личка, SQLite, Spotify OAuth. Яндекс пока не подключаем."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from yandex_spike.application.accounts import load_account, logout_account
 from yandex_spike.application.ports import UserAccountStore
+from yandex_spike.application.spotify_connect import SpotifyConnectService, SpotifyOAuthError
 from yandex_spike.telegram.copy import (
     CALLBACK_CONNECT_SPOTIFY,
     CALLBACK_CONNECT_YANDEX,
@@ -16,12 +17,15 @@ from yandex_spike.telegram.copy import (
     HELP_TEXT,
     LOGOUT_DONE,
     LOGOUT_NOTHING,
-    NOT_READY_CONNECT,
     NOT_READY_SCAN,
+    NOT_READY_YANDEX,
+    SPOTIFY_CONNECT_INTRO,
+    SPOTIFY_CONNECT_NOT_CONFIGURED,
     UNKNOWN_COMMAND,
+    spotify_connect_failed_text,
     start_text,
 )
-from yandex_spike.telegram.keyboards import start_keyboard
+from yandex_spike.telegram.keyboards import spotify_auth_keyboard, start_keyboard
 
 
 def _store(context: ContextTypes.DEFAULT_TYPE) -> UserAccountStore:
@@ -31,11 +35,35 @@ def _store(context: ContextTypes.DEFAULT_TYPE) -> UserAccountStore:
     return store
 
 
+def _spotify_connect(context: ContextTypes.DEFAULT_TYPE) -> SpotifyConnectService | None:
+    return context.application.bot_data.get("spotify_connect")
+
+
 def _telegram_id(update: Update) -> int | None:
     user = update.effective_user
     if user is None:
         return None
     return user.id
+
+
+async def _send_spotify_link(
+    message: Message,
+    context: ContextTypes.DEFAULT_TYPE,
+    telegram_id: int,
+) -> None:
+    service = _spotify_connect(context)
+    if service is None:
+        await message.reply_text(SPOTIFY_CONNECT_NOT_CONFIGURED)
+        return
+    try:
+        link = service.begin(telegram_id)
+    except SpotifyOAuthError as exc:
+        await message.reply_text(spotify_connect_failed_text(str(exc)))
+        return
+    await message.reply_text(
+        SPOTIFY_CONNECT_INTRO,
+        reply_markup=spotify_auth_keyboard(link.authorize_url),
+    )
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -72,9 +100,16 @@ async def cmd_logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await message.reply_text(LOGOUT_DONE if had else LOGOUT_NOTHING)
 
 
+async def cmd_connect_spotify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    telegram_id = _telegram_id(update)
+    if message is None or telegram_id is None:
+        return
+    await _send_spotify_link(message, context, telegram_id)
+
+
 async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Кнопки /start. Connect/scan в B2 ещё не ходят в музыку."""
-    del context
+    """Кнопки /start. Spotify — OAuth; Яндекс и scan пока честно «не готово»."""
     query = update.callback_query
     if query is None or query.data is None:
         return
@@ -88,8 +123,14 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if query.data == CALLBACK_HELP:
         await origin.reply_text(HELP_TEXT)
         return
-    if query.data in {CALLBACK_CONNECT_YANDEX, CALLBACK_CONNECT_SPOTIFY}:
-        await origin.reply_text(NOT_READY_CONNECT)
+    if query.data == CALLBACK_CONNECT_YANDEX:
+        await origin.reply_text(NOT_READY_YANDEX)
+        return
+    if query.data == CALLBACK_CONNECT_SPOTIFY:
+        telegram_id = _telegram_id(update)
+        if telegram_id is None:
+            return
+        await _send_spotify_link(origin, context, telegram_id)
         return
     if query.data == CALLBACK_SCAN:
         await origin.reply_text(NOT_READY_SCAN)

@@ -366,7 +366,7 @@ Spotify: не подключён / подключён как <имя>
 - [x] **B0.** Согласовать спорные решения в §11 (публичная бета, без доната).
 - [x] **B1.** BotFather + токен; `/start` (дисклеймер-текст + меню) и `/help`.
 - [x] **B2.** SQLite: user, шифрование токенов; `/logout`.
-- [ ] **B3.** HTTP callback Spotify + `/connect_spotify` (сначала localhost).
+- [x] **B3.** HTTP callback Spotify + `/connect_spotify` (сначала localhost).
 - [ ] **B4.** `/connect_yandex` (paste implicit URL).
 - [ ] **B5.** `/scan` → inspect, прогресс.
 - [ ] **B6.** `/plan` dry-run + `/status` / `/cancel`.
