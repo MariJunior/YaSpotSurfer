@@ -372,7 +372,7 @@ Spotify: не подключён / подключён как <имя>
 - [x] **B2.** SQLite: user, шифрование токенов; `/logout`.
 - [x] **B3.** HTTP callback Spotify + `/connect_spotify` (сначала localhost).
 - [x] **B4.** `/connect_yandex` (paste implicit URL).
-- [ ] **B5.** `/scan` → inspect, прогресс.
+- [x] **B5.** `/scan` → inspect, прогресс.
 - [ ] **B6.** `/plan` dry-run + `/status` / `/cancel`.
 - [ ] **B7.** `/review` кнопки.
 - [ ] **B8.** `/migrate` песочница, затем confirm → Liked Songs.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from yandex_spike.application.ports import UserAccountStore
+from yandex_spike.application.scan import clear_user_library_data
 from yandex_spike.domain.bot_user import BotUser
 
 
@@ -12,4 +13,7 @@ def load_account(store: UserAccountStore, telegram_id: int) -> BotUser:
 
 
 def logout_account(store: UserAccountStore, telegram_id: int) -> bool:
-    return store.logout(telegram_id)
+    had = store.logout(telegram_id)
+    # Snapshot на диске тоже убираем — иначе после смены аккаунта всплывёт чужой.
+    clear_user_library_data(telegram_id)
+    return had

@@ -1,4 +1,4 @@
-"""Хендлеры: личка, SQLite, Spotify OAuth, меню. Яндекс — в yandex_flow."""
+"""Хендлеры: личка, SQLite, Spotify OAuth, меню. Яндекс — в yandex_flow, scan — в scan_flow."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from yandex_spike.telegram.copy import (
     HELP_TEXT,
     LOGOUT_DONE,
     LOGOUT_NOTHING,
-    NOT_READY_SCAN,
     SPOTIFY_CONNECT_INTRO,
     SPOTIFY_CONNECT_NOT_CONFIGURED,
     UNKNOWN_COMMAND,
@@ -25,6 +24,7 @@ from yandex_spike.telegram.copy import (
 )
 from yandex_spike.telegram.deps import telegram_user_id, user_store
 from yandex_spike.telegram.keyboards import spotify_auth_keyboard, start_keyboard
+from yandex_spike.telegram.scan_flow import start_scan
 from yandex_spike.telegram.yandex_flow import start_yandex_connect, yandex_receive_url
 
 
@@ -102,9 +102,12 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     chat = update.effective_chat
     if chat is None or chat.type != Chat.PRIVATE:
         return
-    # Яндекс сам делает query.answer() внутри start_yandex_connect.
+    # Яндекс и scan сами делают query.answer() внутри своих start_*.
     if query.data == CALLBACK_CONNECT_YANDEX:
         await start_yandex_connect(update, context)
+        return
+    if query.data == CALLBACK_SCAN:
+        await start_scan(update, context)
         return
     await query.answer()
     origin = query.message
@@ -118,9 +121,6 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if telegram_id is None:
             return
         await _send_spotify_link(origin, context, telegram_id)
-        return
-    if query.data == CALLBACK_SCAN:
-        await origin.reply_text(NOT_READY_SCAN)
 
 
 async def on_unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

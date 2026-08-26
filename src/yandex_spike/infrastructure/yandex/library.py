@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,8 @@ BATCH_PAUSE_SEC = 0.15
 # yandex-music DefaultTimeout = 5с; через VPN TLS handshake часто не успевает.
 YANDEX_TIMEOUT_SEC = 20
 
+ProgressFn = Callable[[str], None]
+
 
 def _write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,16 +35,31 @@ def _write_json(path: Path, data: Any) -> None:
     )
 
 
-def connect_music_client() -> Client:
-    """Official-like Music token + init(). Свой OAuth app (403) сюда не класть."""
-    token_data = load_token(TOKEN_FILE_MUSIC)
-    if token_data is None or not token_data.get("access_token"):
-        raise RuntimeError(
-            f"Нет Music token в {TOKEN_FILE_MUSIC}. "
-            "Сначала: uv run yandex-spike auth-implicit"
-        )
+def _emit(progress: ProgressFn | None, message: str) -> None:
+    if progress is not None:
+        progress(message)
+    else:
+        print(message)
 
-    client = Client(token_data["access_token"])
+
+def connect_music_client(
+    access_token: str | None = None,
+    *,
+    progress: ProgressFn | None = None,
+) -> Client:
+    """Official-like Music token + init(). Свой OAuth app (403) сюда не класть."""
+    token = access_token
+    if not token:
+        token_data = load_token(TOKEN_FILE_MUSIC)
+        if token_data is None or not token_data.get("access_token"):
+            raise RuntimeError(
+                f"Нет Music token в {TOKEN_FILE_MUSIC}. "
+                "Сначала: uv run yandex-spike auth-implicit"
+            )
+        token = str(token_data["access_token"])
+
+    _emit(progress, "Подключаюсь к Яндекс Музыке…")
+    client = Client(token)
     client.request.set_timeout(YANDEX_TIMEOUT_SEC)
     call_yandex("account/status", client.init)
     return client
@@ -133,12 +151,12 @@ def _normalize_track_dict(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _playlist_raw_path(kind: int, uid: int | None) -> Path | None:
+def _playlist_raw_path(kind: int, uid: int | None, raw_dir: Path) -> Path | None:
     if uid is not None:
-        path = RAW_DIR / f"playlist-{uid}-{kind}.json"
+        path = raw_dir / f"playlist-{uid}-{kind}.json"
         if path.exists():
             return path
-    matches = list(RAW_DIR.glob(f"playlist-*-{kind}.json"))
+    matches = list(raw_dir.glob(f"playlist-*-{kind}.json"))
     if not matches:
         return None
     matches.sort(key=lambda item: item.stat().st_mtime, reverse=True)
@@ -150,9 +168,11 @@ def load_cached_playlist(
     *,
     uid: int | None = None,
     track_limit: int | None = None,
+    raw_dir: Path | None = None,
 ) -> dict[str, Any] | None:
     """Уже скачанный raw — без нового запроса к Яндексу (VPN его часто роняет)."""
-    path = _playlist_raw_path(kind, uid)
+    directory = raw_dir or RAW_DIR
+    path = _playlist_raw_path(kind, uid, directory)
     if path is None:
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -173,7 +193,13 @@ def load_cached_playlist(
     }
 
 
-def _fetch_tracks_batched(client: Client, track_ids: list[str]) -> list[Track]:
+def _fetch_tracks_batched(
+    client: Client,
+    track_ids: list[str],
+    *,
+    progress: ProgressFn | None = None,
+    label: str = "треки",
+) -> list[Track]:
     """POST /tracks пачками: одно тело на много id, чтобы не упереться в лимит."""
     tracks: list[Track] = []
     total = len(track_ids)
@@ -182,7 +208,7 @@ def _fetch_tracks_batched(client: Client, track_ids: list[str]) -> list[Track]:
         chunk = track_ids[start : start + TRACK_BATCH_SIZE]
         tracks.extend(call_yandex("tracks", client.tracks, chunk))
         done = min(start + TRACK_BATCH_SIZE, total)
-        print(f"   треки {done}/{total}")
+        _emit(progress, f"{label}: {done}/{total}")
         if done < total:
             time.sleep(BATCH_PAUSE_SEC)
 
@@ -205,18 +231,26 @@ def fetch_playlist_with_tracks(
     client: Client | None = None,
     uid: int | None = None,
     track_limit: int | None = None,
+    raw_dir: Path | None = None,
+    progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     """Один плейлист с полными треками. Не выгружает все 51.
 
     ``users_playlists(kind, uid)`` — uid владельца по доке marshalx; без него
     live тоже работал, но с uid стабильнее.
     """
-    cached = load_cached_playlist(kind, uid=uid, track_limit=track_limit)
+    directory = raw_dir or RAW_DIR
+    cached = load_cached_playlist(
+        kind, uid=uid, track_limit=track_limit, raw_dir=directory
+    )
     if cached:
-        print(f"   кэш {RAW_DIR.name}/playlist-*-{kind}.json, Яндекс не зовём")
+        _emit(
+            progress,
+            f"Плейлист kind={kind}: беру из кэша (Яндекс не зову)",
+        )
         return cached
 
-    music_client = client or connect_music_client()
+    music_client = client or connect_music_client(progress=progress)
     if uid is not None:
         full = call_yandex(
             f"playlist kind={kind}",
@@ -242,12 +276,19 @@ def fetch_playlist_with_tracks(
         item.track_id for item in shorts if getattr(item, "track_id", None)
     ]
     full_tracks = (
-        _fetch_tracks_batched(music_client, track_ids) if track_ids else []
+        _fetch_tracks_batched(
+            music_client,
+            track_ids,
+            progress=progress,
+            label=f"Плейлист «{full.title}»",
+        )
+        if track_ids
+        else []
     )
 
     raw_name = f"playlist-{full.uid}-{full.kind}.json"
     _write_json(
-        RAW_DIR / raw_name,
+        directory / raw_name,
         {
             "playlist": full.to_dict(),
             "tracks": [track.to_dict() for track in full_tracks],
@@ -259,43 +300,62 @@ def fetch_playlist_with_tracks(
     }
 
 
-def inspect_library() -> dict[str, Any]:
+def inspect_library(
+    *,
+    access_token: str | None = None,
+    snapshot_path: Path | None = None,
+    raw_dir: Path | None = None,
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
     """Полный snapshot лайков + заголовки всех плейлистов.
 
     Полные треки — только у двух самых коротких непустых плейлистов:
     большой dump не нужен для matching CLI, его добирает
     ``fetch_playlist_with_tracks``.
+
+    ``access_token`` / пути — для бота (per-user). Без них — CLI defaults.
     """
-    print("Подключаюсь к Music API...")
-    client = connect_music_client()
+    out_snapshot = snapshot_path or SNAPSHOT_FILE
+    out_raw = raw_dir or RAW_DIR
+
+    client = connect_music_client(access_token, progress=progress)
     account = client.me.account if client.me and client.me.account else None
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    out_raw.mkdir(parents=True, exist_ok=True)
 
     account_payload = {
         "uid": account.uid if account else None,
         "login": account.login if account else None,
         "display_name": account.display_name if account else None,
     }
-    _write_json(RAW_DIR / "account.json", account_payload)
+    _write_json(out_raw / "account.json", account_payload)
 
-    print("Любимые треки (короткий список)...")
-    liked_short = client.users_likes_tracks()
+    _emit(progress, "Читаю любимые треки…")
+    liked_short = call_yandex("likes/tracks", client.users_likes_tracks)
     short_ids = list(liked_short.tracks_ids) if liked_short else []
     _write_json(
-        RAW_DIR / "liked-tracks-short.json",
+        out_raw / "liked-tracks-short.json",
         liked_short.to_dict() if liked_short else {},
     )
 
-    print(f"Полные метаданные лайков: {len(short_ids)}")
-    liked_tracks = _fetch_tracks_batched(client, short_ids) if short_ids else []
+    _emit(progress, f"Скачиваю метаданные лайков: 0/{len(short_ids)}")
+    liked_tracks = (
+        _fetch_tracks_batched(
+            client,
+            short_ids,
+            progress=progress,
+            label="Лайки",
+        )
+        if short_ids
+        else []
+    )
     liked_raw = [track.to_dict() for track in liked_tracks]
-    _write_json(RAW_DIR / "liked-tracks.json", liked_raw)
+    _write_json(out_raw / "liked-tracks.json", liked_raw)
 
-    print("Плейлисты...")
-    playlists = client.users_playlists_list() or []
+    _emit(progress, "Читаю список плейлистов…")
+    playlists = call_yandex("playlists/list", client.users_playlists_list) or []
     _write_json(
-        RAW_DIR / "playlists.json",
+        out_raw / "playlists.json",
         [playlist.to_dict() for playlist in playlists],
     )
 
@@ -309,21 +369,38 @@ def inspect_library() -> dict[str, Any]:
 
     sample_normalized: list[dict[str, Any]] = []
     for playlist in sample_playlists:
-        print(
-            f"Треки плейлиста «{playlist.title}» "
-            f"({playlist.track_count})..."
+        _emit(
+            progress,
+            f"Образец плейлиста «{playlist.title}» ({playlist.track_count})…",
         )
-        full = client.users_playlists(playlist.kind)
+        full = call_yandex(
+            f"playlist kind={playlist.kind}",
+            client.users_playlists,
+            playlist.kind,
+        )
+        if full is None:
+            continue
+        if isinstance(full, list):
+            full = full[0] if full else None
         if full is None:
             continue
 
         shorts = full.tracks or []
         track_ids = [item.track_id for item in shorts]
-        full_tracks = _fetch_tracks_batched(client, track_ids) if track_ids else []
+        full_tracks = (
+            _fetch_tracks_batched(
+                client,
+                track_ids,
+                progress=progress,
+                label=f"«{playlist.title}»",
+            )
+            if track_ids
+            else []
+        )
 
         raw_name = f"playlist-{playlist.uid}-{playlist.kind}.json"
         _write_json(
-            RAW_DIR / raw_name,
+            out_raw / raw_name,
             {
                 "playlist": full.to_dict(),
                 "tracks": [track.to_dict() for track in full_tracks],
@@ -336,15 +413,15 @@ def inspect_library() -> dict[str, Any]:
             }
         )
 
-    print("Любимые исполнители и альбомы...")
-    liked_artists = client.users_likes_artists() or []
-    liked_albums = client.users_likes_albums() or []
+    _emit(progress, "Читаю любимых исполнителей и альбомы…")
+    liked_artists = call_yandex("likes/artists", client.users_likes_artists) or []
+    liked_albums = call_yandex("likes/albums", client.users_likes_albums) or []
     _write_json(
-        RAW_DIR / "liked-artists.json",
+        out_raw / "liked-artists.json",
         [item.to_dict() for item in liked_artists],
     )
     _write_json(
-        RAW_DIR / "liked-albums.json",
+        out_raw / "liked-albums.json",
         [item.to_dict() for item in liked_albums],
     )
 
@@ -374,5 +451,6 @@ def inspect_library() -> dict[str, Any]:
             ),
         },
     }
-    _write_json(SNAPSHOT_FILE, snapshot)
+    _write_json(out_snapshot, snapshot)
+    _emit(progress, "Список собран.")
     return snapshot

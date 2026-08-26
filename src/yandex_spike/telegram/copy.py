@@ -13,13 +13,19 @@ HELP_HINT = (
     "Напиши /help, там обычными словами, что бот будет делать."
 )
 
-NOT_READY_SCAN = (
-    "Собрать список треков из Яндекса пока нельзя: это ещё в работе. "
-    "Сейчас можно подключить Яндекс и Spotify, открыть /help или /logout."
-)
 UNKNOWN_COMMAND = (
     "Этой команды пока нет. Сейчас можно написать /start, /help, "
-    "/connect_yandex, /connect_spotify или /logout."
+    "/connect_yandex, /connect_spotify, /scan или /logout."
+)
+
+SCAN_START = "Собираю список треков из Яндекс Музыки…"
+SCAN_PROGRESS_PREFIX = "Собираю список треков…\n"
+SCAN_NEED_YANDEX = (
+    "Сначала подключи Яндекс Музыку: /connect_yandex "
+    "или кнопка «Подключить Яндекс»."
+)
+SCAN_ALREADY_RUNNING = (
+    "Уже собираю твой список. Подожди окончания — или напиши позже /scan снова."
 )
 
 LOGOUT_DONE = (
@@ -138,6 +144,32 @@ HELP_TEXT = (
     "\n"
     "Команда /logout — отключает Яндекс и Spotify и стирает ключи доступа.\n"
     "\n"
-    "Сейчас работают /start, /help, /connect_yandex, /connect_spotify и /logout. "
-    "«Собрать список» (/scan) ещё в разработке."
+    "Сейчас работают /start, /help, /connect_yandex, /connect_spotify, /scan и /logout. "
+    "Подбор в Spotify (/plan) — следующий шаг."
 )
+
+
+def scan_done_text(*, liked_tracks: int, playlists: int, liked_with_isrc: int) -> str:
+    # ISRC почти никогда нет — объясняем простым языком, без аббревиатуры в чате.
+    if liked_tracks > 0 and liked_with_isrc == 0:
+        isrc_line = (
+            "Международных кодов треков почти нет — буду искать по названию и исполнителю."
+        )
+    elif liked_tracks > 0:
+        isrc_line = (
+            f"С международным кодом: {liked_with_isrc} из {liked_tracks}. "
+            "Остальное — по названию и исполнителю."
+        )
+    else:
+        isrc_line = "Лайков пока нет — можно всё равно смотреть плейлисты позже."
+    return (
+        f"В Яндексе: {liked_tracks} лайков, {playlists} плейлистов.\n"
+        f"{isrc_line}\n"
+        "\n"
+        "Дальше будет команда /plan — подобрать эти треки в Spotify "
+        "(ещё в разработке)."
+    )
+
+
+def scan_failed_text(reason: str) -> str:
+    return f"{reason}\n\nМожно попробовать снова: /scan"

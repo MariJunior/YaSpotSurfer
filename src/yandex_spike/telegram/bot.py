@@ -37,6 +37,7 @@ from yandex_spike.telegram.handlers import (
     on_plain_text,
     on_unknown_command,
 )
+from yandex_spike.telegram.scan_flow import cmd_scan
 from yandex_spike.telegram.yandex_flow import cmd_cancel_yandex, cmd_connect_yandex
 
 load_dotenv()
@@ -50,6 +51,7 @@ _BOT_COMMANDS = [
     ("help", "Как будет устроен перенос"),
     ("connect_yandex", "Подключить Яндекс Музыку"),
     ("connect_spotify", "Подключить Spotify"),
+    ("scan", "Собрать список треков из Яндекса"),
     ("cancel", "Отменить ввод адреса Яндекса"),
     ("logout", "Отключить аккаунты и стереть доступ"),
 ]
@@ -147,6 +149,7 @@ def build_application(
     application.add_handler(
         CommandHandler("connect_spotify", cmd_connect_spotify, filters=private)
     )
+    application.add_handler(CommandHandler("scan", cmd_scan, filters=private))
     application.add_handler(CommandHandler("cancel", cmd_cancel_yandex, filters=private))
     application.add_handler(CommandHandler("logout", cmd_logout, filters=private))
     application.add_handler(CallbackQueryHandler(on_menu_callback, pattern=r"^menu:"))

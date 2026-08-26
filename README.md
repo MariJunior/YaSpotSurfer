@@ -2,7 +2,7 @@
 
 Миграция **личной** музыкальной библиотеки из Яндекс Музыки в Spotify.
 
-Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B4 — подключены Яндекс и Spotify, дальше `/scan`.
+Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B5 — `/scan` (снимок библиотеки Яндекса), дальше `/plan`.
 
 Правило matching: **неверный auto-match хуже пропуска**. LLM для обычного matching не используется.
 
@@ -20,7 +20,7 @@ CLI (main) / Telegram  →  application (сценарии + порты)  →  do
 - **application** — dry-run, review, запись; порты `MusicCatalogSearcher` и `LibraryWriter`.
 - **infrastructure** — адаптеры Яндекса и Spotify, JSON в `.data/`.
 - **CLI** — аргументы, файлы, печать. OAuth пока в `yandex.py` / `spotify.py`.
-- **Telegram** — личка; `/connect_yandex`, `/connect_spotify`, `/logout`; `/scan` с B5.
+- **Telegram** — личка; `/connect_yandex`, `/connect_spotify`, `/scan`, `/logout`.
 
 Spotify Dev Mode (2026) и неофициальный Music API Яндекса живут только в адаптерах.
 
@@ -36,7 +36,7 @@ Spotify Dev Mode (2026) и неофициальный Music API Яндекса �
 
 ## В разработке
 
-**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B4: оба аккаунта можно подключить; снимок библиотеки — B5.
+**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B5: `/scan` пишет snapshot в `.data/bot-users/<telegram_id>/`; дальше `/plan`.
 
 CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
 
@@ -107,7 +107,7 @@ uv run yaspotsurfer-bot
 
 | Команда | Что делает |
 |---------|------------|
-| `uv run yaspotsurfer-bot` | `/start`, `/help`, `/connect_yandex`, `/connect_spotify`, `/logout`. «Собрать список» ещё не готов |
+| `uv run yaspotsurfer-bot` | `/start`, `/help`, `/connect_yandex`, `/connect_spotify`, `/scan`, `/logout` |
 
 ### Запись в Spotify
 
