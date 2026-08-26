@@ -159,7 +159,11 @@ Telegram user.id
 
 **Яндекс:** тот же implicit, что CLI — «открой ссылку, пришли URL с `#access_token=`». Сообщение с токеном не логируем и по возможности удаляем. Другого read-API нет; в `/start` об этом написано.
 
-**VPN:** как в CLI. Spotify с РФ часто 403; Яндекс через тот же VPN часто timeout. Бот должен писать понятную ошибку («включи/выключи VPN»), а не падать молча. Ретраи Яндекса уже есть в infrastructure.
+**VPN:** из РФ Telegram и Spotify часто требуют VPN; Яндекс через тот же VPN часто timeout.
+Не советовать «выключи VPN» как основной ответ — иначе бот (polling) и Spotify отвалятся.
+Писать про **split tunnel**: `oauth.yandex.ru` / `music.yandex.ru` / `api.music.yandex.net` мимо VPN.
+Проверка токена при `/connect_yandex` — только HTTP с timeout (без `Client.init`),
+в `asyncio.to_thread`, чтобы polling не зависал. Ретраи выгрузки — в infrastructure.
 
 ---
 
@@ -367,7 +371,7 @@ Spotify: не подключён / подключён как <имя>
 - [x] **B1.** BotFather + токен; `/start` (дисклеймер-текст + меню) и `/help`.
 - [x] **B2.** SQLite: user, шифрование токенов; `/logout`.
 - [x] **B3.** HTTP callback Spotify + `/connect_spotify` (сначала localhost).
-- [ ] **B4.** `/connect_yandex` (paste implicit URL).
+- [x] **B4.** `/connect_yandex` (paste implicit URL).
 - [ ] **B5.** `/scan` → inspect, прогресс.
 - [ ] **B6.** `/plan` dry-run + `/status` / `/cancel`.
 - [ ] **B7.** `/review` кнопки.

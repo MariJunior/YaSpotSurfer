@@ -179,6 +179,31 @@ def request_access_token(code: str) -> dict:
     return token_data
 
 
+def probe_music_http(access_token: str, *, timeout: float | tuple[float, float] = (5, 15)) -> dict:
+    """Быстрая проверка токена: только GET /account/status.
+
+    Без Client.init() — у библиотеки нет жёсткого timeout, на «плохом» VPN
+    init может висеть минутами и заморозить Telegram polling.
+    """
+    headers = {
+        **MUSIC_API_HEADERS,
+        "Authorization": f"OAuth {access_token}",
+    }
+    response = requests.get(
+        MUSIC_ACCOUNT_STATUS_URL,
+        headers=headers,
+        timeout=timeout,
+    )
+    error_text = None
+    if response.status_code != 200:
+        error_text = (response.text or "")[:200]
+    return {
+        "http_status": response.status_code,
+        "http_error_excerpt": error_text,
+        "ok": response.status_code == 200,
+    }
+
+
 def probe_account_status(access_token: str) -> dict:
     """Повторяет запрос Client.init(): GET /account/status с заголовками библиотеки."""
     headers = {

@@ -31,3 +31,9 @@ def spotify_auth_keyboard(authorize_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("Открыть Spotify", url=authorize_url)]]
     )
+
+
+def yandex_auth_keyboard(authorize_url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Открыть Яндекс", url=authorize_url)]]
+    )

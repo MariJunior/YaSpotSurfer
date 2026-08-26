@@ -21,6 +21,7 @@ class TelegramCopyTests(unittest.TestCase):
 
     def test_help_is_plain_language(self) -> None:
         self.assertIn("/scan", HELP_TEXT)
+        self.assertIn("/connect_yandex", HELP_TEXT)
         self.assertIn("/connect_spotify", HELP_TEXT)
         self.assertIn("VPN", HELP_TEXT)
         self.assertIn("/logout", HELP_TEXT)

@@ -2,7 +2,7 @@
 
 Миграция **личной** музыкальной библиотеки из Яндекс Музыки в Spotify.
 
-Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B3 — `/start`, `/help`, `/connect_spotify`, `/logout`, SQLite.
+Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B4 — подключены Яндекс и Spotify, дальше `/scan`.
 
 Правило matching: **неверный auto-match хуже пропуска**. LLM для обычного matching не используется.
 
@@ -20,7 +20,7 @@ CLI (main) / Telegram  →  application (сценарии + порты)  →  do
 - **application** — dry-run, review, запись; порты `MusicCatalogSearcher` и `LibraryWriter`.
 - **infrastructure** — адаптеры Яндекса и Spotify, JSON в `.data/`.
 - **CLI** — аргументы, файлы, печать. OAuth пока в `yandex.py` / `spotify.py`.
-- **Telegram** — личка, `/start` / `/help` / `/connect_spotify` / `/logout`; Яндекс в хендлерах с B4.
+- **Telegram** — личка; `/connect_yandex`, `/connect_spotify`, `/logout`; `/scan` с B5.
 
 Spotify Dev Mode (2026) и неофициальный Music API Яндекса живут только в адаптерах.
 
@@ -36,7 +36,7 @@ Spotify Dev Mode (2026) и неофициальный Music API Яндекса �
 
 ## В разработке
 
-**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B3: Spotify через браузер + localhost callback; Яндекс — B4.
+**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B4: оба аккаунта можно подключить; снимок библиотеки — B5.
 
 CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
 
@@ -107,7 +107,7 @@ uv run yaspotsurfer-bot
 
 | Команда | Что делает |
 |---------|------------|
-| `uv run yaspotsurfer-bot` | Polling + localhost Spotify callback: `/start`, `/help`, `/connect_spotify`, `/logout`. Яндекс и «собрать список» ещё не готовы |
+| `uv run yaspotsurfer-bot` | `/start`, `/help`, `/connect_yandex`, `/connect_spotify`, `/logout`. «Собрать список» ещё не готов |
 
 ### Запись в Spotify
 
@@ -128,7 +128,7 @@ uv run yandex-spike migrate-playlists --limit 3 --track-limit 10 --resume
 Тесты:
 
 ```bash
-uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network tests.test_telegram_copy tests.test_bot_users tests.test_spotify_connect
+uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network tests.test_telegram_copy tests.test_bot_users tests.test_spotify_connect tests.test_yandex_connect
 ```
 
 `tests/__init__.py` обязателен: иначе unittest подхватывает `tests` из `yandex-music`.
