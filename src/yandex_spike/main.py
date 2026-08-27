@@ -35,7 +35,7 @@ from .infrastructure.yandex.library import (
     load_cached_playlist,
 )
 from .spotify import authenticate as authenticate_spotify
-from .spotify import run_spotify_spike
+from .spotify import SpotifyQuotaExceeded, run_spotify_spike
 from .yandex import (
     OFFICIAL_LIKE_CLIENT_ID,
     TOKEN_FILE_APP,
@@ -283,22 +283,43 @@ def cmd_match_preview() -> None:
     print(f"JSON: {report_path}")
 
 
-def cmd_migrate_dry_run(*, limit: int, resume: bool) -> None:
+def _take_items(items: list, limit: int | None) -> list:
+    """``limit=None`` — вся коллекция (боевой режим)."""
+    if limit is None:
+        return list(items)
+    return list(items[:limit])
+
+
+def _print_quota_hint(*, done: int, retry_after_sec: int) -> None:
+    hours = max(1, (retry_after_sec + 3599) // 3600)
+    print()
+    print("Квота Spotify Dev Mode (QUOTA_EXCEEDED).")
+    print(f"Уже в checkpoint: {done}. Продолжить через ~{hours} ч:")
+    print("  uv run yandex-spike migrate-dry-run --resume")
+    print("Эмпирика: ~650 search/сутки на одно приложение. См. docs/dry-run.md")
+
+
+def cmd_migrate_dry_run(*, limit: int | None, resume: bool) -> None:
     print("Migrate dry-run")
     print("-" * 40)
     print()
-    print("Write в Spotify нет. Нужны inspect-snapshot и Spotify token.")
+    print("Write в Spotify нет. Нужны scan-snapshot и Spotify token.")
+    if limit is None:
+        print("Лимит: вся коллекция лайков (боевой режим).")
+    else:
+        print(f"Лимит: первые {limit} лайков.")
+    print("Квота Dev Mode: при QUOTA_EXCEEDED сохранится checkpoint → --resume.")
     print()
 
     if not SNAPSHOT_FILE.exists():
-        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike inspect")
+        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike scan")
 
     snapshot = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
     items = snapshot.get("liked_tracks") or []
-    tracks = [track_from_yandex_snapshot(item) for item in items[:limit]]
+    tracks = [track_from_yandex_snapshot(item) for item in _take_items(items, limit)]
 
     state_path = Path(".data") / "dry-run-state.json"
-    processed = {}
+    processed: dict = {}
     if resume and state_path.exists():
         processed = json.loads(state_path.read_text(encoding="utf-8")).get(
             "processed"
@@ -307,12 +328,21 @@ def cmd_migrate_dry_run(*, limit: int, resume: bool) -> None:
 
     access_token = authenticate_spotify()
     searcher = SpotifySearcher(access_token)
-    report = run_dry_run(
-        tracks,
-        searcher,
-        processed=processed,
-        on_progress=_print_match_progress,
-    )
+    try:
+        report = run_dry_run(
+            tracks,
+            searcher,
+            processed=processed,
+            on_progress=_print_match_progress,
+        )
+    except SpotifyQuotaExceeded as exc:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({"processed": processed}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        _print_quota_hint(done=len(processed), retry_after_sec=exc.retry_after_sec)
+        raise SystemExit(2) from exc
 
     report_path = Path(".data") / "dry-run-report.json"
     state_path.write_text(
@@ -390,7 +420,7 @@ def cmd_review(*, accept: str | None, skip: str | None) -> None:
 
 def cmd_migrate(
     *,
-    limit: int,
+    limit: int | None,
     resume: bool,
     dest: str,
     playlist_name: str,
@@ -400,21 +430,25 @@ def cmd_migrate(
     print("-" * 40)
     print()
     if dest == "library":
-        print("DEST=library: пишет лайки в медиатеку.")
+        print("DEST=library: пишет лайки в медиатеку Spotify.")
     else:
         print(f"DEST=playlist: песочница «{playlist_name}», лайки не трогает.")
     print("Пишет только exact / high-confidence и review --accept.")
+    if limit is None:
+        print("Лимит: вся коллекция лайков из snapshot.")
+    else:
+        print(f"Лимит: первые {limit} лайков.")
     print()
 
     if not SNAPSHOT_FILE.exists():
-        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike inspect")
+        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike scan")
 
     snapshot = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
     items = snapshot.get("liked_tracks") or []
-    tracks = [track_from_yandex_snapshot(item) for item in items[:limit]]
+    tracks = [track_from_yandex_snapshot(item) for item in _take_items(items, limit)]
 
     dry_state_path = Path(".data") / "dry-run-state.json"
-    processed = {}
+    processed: dict = {}
     if dry_state_path.exists():
         processed = json.loads(dry_state_path.read_text(encoding="utf-8")).get(
             "processed"
@@ -436,12 +470,22 @@ def cmd_migrate(
 
     access_token = authenticate_spotify()
     searcher = SpotifySearcher(access_token)
-    dry_report = run_dry_run(
-        tracks,
-        searcher,
-        processed=processed,
-        on_progress=_print_match_progress,
-    )
+    try:
+        dry_report = run_dry_run(
+            tracks,
+            searcher,
+            processed=processed,
+            on_progress=_print_match_progress,
+        )
+    except SpotifyQuotaExceeded as exc:
+        dry_state_path.parent.mkdir(parents=True, exist_ok=True)
+        dry_state_path.write_text(
+            json.dumps({"processed": processed}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        _print_quota_hint(done=len(processed), retry_after_sec=exc.retry_after_sec)
+        raise SystemExit(2) from exc
+
     dry_state_path.parent.mkdir(parents=True, exist_ok=True)
     dry_state_path.write_text(
         json.dumps(
@@ -508,10 +552,10 @@ def cmd_migrate(
 
 def cmd_migrate_playlists(
     *,
-    limit: int,
+    limit: int | None,
     resume: bool,
     kind: int | None,
-    track_limit: int,
+    track_limit: int | None,
     dry_run: bool,
 ) -> None:
     print("Migrate playlists")
@@ -523,12 +567,20 @@ def cmd_migrate_playlists(
         print("DRY-RUN: search + match, Spotify playlist не создаём.")
     else:
         print("Пишет только exact / high-confidence и review --accept.")
+    if limit is None:
+        print("Плейлистов: все непустые из snapshot (сначала короткие).")
+    else:
+        print(f"Плейлистов: до {limit} (сначала короткие).")
+    if track_limit is None:
+        print("Треков в каждом: без обрезки.")
+    else:
+        print(f"Треков в каждом: ≤{track_limit}.")
     print()
 
-    if track_limit < 1:
+    if track_limit is not None and track_limit < 1:
         raise RuntimeError("--track-limit должен быть >= 1")
     if not SNAPSHOT_FILE.exists():
-        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike inspect")
+        raise RuntimeError("Нет snapshot. Сначала: uv run yandex-spike scan")
 
     snapshot = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
     selected = select_playlist_headers(
@@ -555,10 +607,11 @@ def cmd_migrate_playlists(
     for header in selected:
         yandex_kind = int(header["kind"])
         title = header.get("title") or ""
+        track_note = "все" if track_limit is None else f"≤{track_limit}"
         print(
             f"Плейлист Яндекса: «{title}» "
             f"(kind={yandex_kind}, в snapshot {header.get('track_count')} треков, "
-            f"берём ≤{track_limit})"
+            f"берём {track_note})"
         )
         try:
             if yandex_client is None and load_cached_playlist(
@@ -583,12 +636,26 @@ def cmd_migrate_playlists(
             print("   пустой после fetch — пропуск")
             continue
 
-        dry_report = run_dry_run(
-            tracks,
-            searcher,
-            processed=dry_payload.get("processed") or {},
-            on_progress=_print_match_progress,
-        )
+        try:
+            playlist_processed = dry_payload.setdefault("processed", {})
+            dry_report = run_dry_run(
+                tracks,
+                searcher,
+                processed=playlist_processed,
+                on_progress=_print_match_progress,
+            )
+        except SpotifyQuotaExceeded as exc:
+            dry_state_path.parent.mkdir(parents=True, exist_ok=True)
+            dry_state_path.write_text(
+                json.dumps(dry_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            _print_quota_hint(
+                done=len(dry_payload.get("processed") or {}),
+                retry_after_sec=exc.retry_after_sec,
+            )
+            raise SystemExit(2) from exc
+
         dry_payload["processed"] = dry_report["processed"]
         match_rows = [dry_report["processed"][track.id] for track in tracks]
         dest_name = sandbox_playlist_name(detail.get("title") or title)
@@ -707,7 +774,10 @@ def cmd_oauth_app_info() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="YaSpotSurfer Yandex spike (auth research)",
+        description=(
+            "YaSpotSurfer CLI: перенос Яндекс Музыка → Spotify "
+            "(scan → match → review → write)."
+        ),
     )
     parser.add_argument(
         "command",
@@ -736,8 +806,8 @@ def main() -> None:
         type=int,
         default=None,
         help=(
-            "migrate / dry-run: сколько лайков (по умолчанию 20). "
-            "migrate-playlists: сколько плейлистов (по умолчанию 1, сначала короткие)."
+            "migrate / dry-run: сколько лайков (по умолчанию — все). "
+            "migrate-playlists: сколько плейлистов (по умолчанию — все, сначала короткие)."
         ),
     )
     parser.add_argument(
@@ -768,8 +838,11 @@ def main() -> None:
     parser.add_argument(
         "--track-limit",
         type=int,
-        default=10,
-        help="migrate-playlists: максимум треков в одном плейлисте (не весь гигант).",
+        default=None,
+        help=(
+            "migrate-playlists: максимум треков в одном плейлисте "
+            "(по умолчанию — без обрезки)."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -779,9 +852,6 @@ def main() -> None:
     parser.add_argument("--accept", help="review: принять selected для source_id")
     parser.add_argument("--skip", help="review: пропустить source_id")
     args = parser.parse_args()
-    # Общий --limit: для лайков 20, для плейлистов 1 — чтобы не создать 20 копий случайно.
-    if args.limit is None:
-        args.limit = 1 if args.command == "migrate-playlists" else 20
 
     if args.command == "probe":
         cmd_probe()

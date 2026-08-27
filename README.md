@@ -1,152 +1,242 @@
 # YaSpotSurfer
 
-Миграция **личной** музыкальной библиотеки из Яндекс Музыки в Spotify.
+Перенос **личной** музыкальной библиотеки из **Яндекс Музыки** в **Spotify**.
 
-Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B6 — `/plan` (dry-run), дальше `/review`.
+Два равноправных контура одного пайплайна:
 
-Правило matching: **неверный auto-match хуже пропуска**. LLM для обычного matching не используется.
+| Контур | Для кого |
+|--------|----------|
+| **CLI** (`yandex-spike`) | Форк, свой компьютер, полный перенос без Telegram |
+| **Telegram-бот** (`yaspotsurfer-bot`) | Тот же пайплайн в личке, удобный UX |
 
-Живую медиатеку (~4000 лайков, 51 плейлист) CLI **не** переносит целиком. Репетиция — песочница Spotify и `--limit`. Боевой переезд — этап бота.
+> **Правило matching:** неверный auto-match хуже пропуска.  
+> Нейросети для обычного matching **не** используются.
 
-**Spotify Dev Mode:** дневная квота search (`QUOTA_EXCEEDED`) — эмпирика ~**650** треков/сутки на наш app. Extended Quota для хобби почти недоступна. `/plan` идёт пачками с checkpoint; см. [docs/dry-run.md](docs/dry-run.md).
+---
 
-## Как это устроено
+## Что умеет
 
-```text
-CLI (main) / Telegram  →  application (сценарии + порты)  →  domain (Track, matching)
-                              ↑
-                      infrastructure (Yandex / Spotify / SQLite бота / .data JSON)
-```
+- Подключение Яндекс Музыки (неофициальный Music-совместимый token) и Spotify OAuth
+- Снимок библиотеки: лайки, плейлисты, исполнители, альбомы
+- Детерминированный matching: auto ≥ **0.90**, review ≥ **0.70** (remaster/live и сильный промах длительности не уходят в auto)
+- Dry-run с checkpoint и `--resume` (в т.ч. после дневной квоты Spotify)
+- Ручной review спорных (`accept` / `skip`)
+- Запись лайков: по умолчанию в плейлист-песочницу `YaSpotSurfer sandbox`; в «Любимое» — только явно (`--dest library` / в боте слово `СОХРАНИТЬ`)
+- Копии плейлистов Яндекса → отдельные Spotify playlist `YaSpotSurfer: <имя>`
+- Ретраи сети; raw-кэш плейлистов Яндекса, если VPN роняет API
 
-- **domain** — сущности, нормализация, matching. Без HTTP.
-- **application** — dry-run, review, запись; порты `MusicCatalogSearcher` и `LibraryWriter`.
-- **infrastructure** — адаптеры Яндекса и Spotify, JSON в `.data/`.
-- **CLI** — аргументы, файлы, печать. OAuth пока в `yandex.py` / `spotify.py`.
-- **Telegram** — личка; `/connect_*`, `/scan`, `/plan`, `/review`, `/migrate`, `/playlists`, `/status`, `/cancel`, `/logout`.
+---
 
-Spotify Dev Mode (2026) и неофициальный Music API Яндекса живут только в адаптерах.
+## Ограничения (важно прочитать)
 
-## Возможности сейчас (CLI, этап A)
+| Ограничение | Что это значит на практике |
+|-------------|----------------------------|
+| Нет official Yandex library API | Implicit OAuth «как у клиента Музыки»; перенос неофициальный, на свой страх и риск |
+| Spotify **Dev Mode** | Свой app в Dashboard; чужой Spotify часто не пустят без Extended Quota |
+| Дневная квота search | Эмпирика ~**650** `GET /search` в сутки → `QUOTA_EXCEEDED` на много часов. Большая библиотека = несколько дней + `--resume` / снова `/plan` |
+| Search `limit` ≤ 10 | Медленный подбор; прогресс и checkpoint обязательны |
+| VPN | Spotify из РФ часто недоступен без VPN; тот же VPN может ронять Яндекс → split tunnel для `oauth.yandex.ru`, `music.yandex.ru`, `api.music.yandex.net` |
+| Premium | Запись в библиотеку Spotify может требовать Premium у владельца app |
 
-- Авторизация Яндекса (рабочий путь: implicit, official-like client) и Spotify OAuth
-- Snapshot библиотеки Яндекса (лайки, плейлисты, исполнители, альбомы)
-- Детерминированный matching: auto ≥ 0.90, review ≥ 0.70; remaster/live и жёсткий промах длительности не уходят в auto
-- Dry-run с checkpoint, очередь `review` (`accept` / `skip`), `--resume`
-- Запись лайков в песочницу `YaSpotSurfer sandbox` (медиатека — только с `--dest library`)
-- Копии коротких плейлистов Яндекса в `YaSpotSurfer: <имя>`
-- Ретраи сети: Spotify и Яндекс; raw-кэш плейлистов, если VPN роняет `api.music.yandex.net`
+Подробнее: [docs/dry-run.md](docs/dry-run.md), [docs/yandex-public-api.md](docs/yandex-public-api.md).
 
-## В разработке
-
-**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B9: `/playlists`; дальше боевой прогон медиатеки.
-
-CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
-
-## Бэклог
-
-Этап **C** (не начинаем, пока нет бота):
-
-- Postgres при нагрузке (SQLite у бота уже есть)
-- web dashboard (единственное место, где может появиться TypeScript)
-- smart playlist sync, дедуп, «мёртвые» плейлисты
+---
 
 ## Требования
 
-- Python 3.12
+- Python **3.12**
 - [uv](https://docs.astral.sh/uv/)
-- Telegram: бот у [@BotFather](https://t.me/BotFather); в `.env` — `TELEGRAM_BOT_TOKEN`, `TOKEN_ENCRYPTION_KEY`, для Spotify ещё `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`
-- Spotify app в [Developer Dashboard](https://developer.spotify.com/dashboard), Redirect URI: `http://127.0.0.1:8766/callback`
-- Spotify Premium у владельца app (Dev Mode 2026)
-- VPN часто нужен для Spotify («unavailable in this country»). Тот же VPN может ронять Яндекс — CLI ретраит и умеет читать кэш `.data/raw/`
-
-## Быстрый старт
+- Аккаунт Яндекса с Музыкой
+- Spotify app в [Developer Dashboard](https://developer.spotify.com/dashboard)  
+  Redirect URI (по умолчанию): `http://127.0.0.1:8766/callback`
+- В `.env`: `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`  
+  Для бота ещё: `TELEGRAM_BOT_TOKEN`, `TOKEN_ENCRYPTION_KEY` (см. `.env.example`)
 
 ```bash
 uv sync
-# токен Яндекса (redirect с #access_token= — только в локальный терминал)
+cp .env.example .env   # и заполни ключи
+```
+
+---
+
+## Вариант A — CLI (полный перенос)
+
+Подходит, если форкаешь репозиторий и гоняешь всё локально.
+
+### 1. Авторизация
+
+```bash
+# Яндекс: откроется браузер → скопируй redirect с #access_token= в терминал
 uv run yandex-spike auth-implicit
 uv run yandex-spike probe
 
-# Spotify: SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET в .env
+# Spotify: OAuth + короткий smoke (тот же порт callback, что у бота)
 uv run yandex-spike spotify-spike
+```
 
+### 2. Снимок библиотеки
+
+```bash
 uv run yandex-spike scan
-uv run yandex-spike migrate-dry-run --limit 20
-uv run yandex-spike review
-uv run yandex-spike migrate --limit 20
+# → .data/library-snapshot.json
+```
 
-# Telegram (B3): TELEGRAM_BOT_TOKEN, TOKEN_ENCRYPTION_KEY,
-# SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (redirect http://127.0.0.1:8766/callback)
-# Не запускай одновременно CLI spotify-spike — тот же порт callback.
+### 3. Подбор в Spotify (без записи)
+
+```bash
+# Вся коллекция лайков. При квоте — стоп + checkpoint
+uv run yandex-spike migrate-dry-run --resume
+
+# Репетиция на куске (опционально):
+uv run yandex-spike migrate-dry-run --limit 50 --resume
+```
+
+### 4. Спорные
+
+```bash
+uv run yandex-spike review
+uv run yandex-spike review --accept yandex:TRACK_ID
+uv run yandex-spike review --skip yandex:TRACK_ID
+```
+
+### 5. Запись лайков
+
+```bash
+# Песочница (по умолчанию) — лайки Spotify не трогает
+uv run yandex-spike migrate --resume
+
+# Настоящие «Любимые» — только когда песочница проверена
+uv run yandex-spike migrate --dest library --resume
+```
+
+### 6. Плейлисты
+
+```bash
+# Все непустые плейлисты → YaSpotSurfer: <имя> (сначала короткие)
+uv run yandex-spike migrate-playlists --resume
+
+# Осторожный прогон:
+uv run yandex-spike migrate-playlists --limit 3 --track-limit 20 --resume
+uv run yandex-spike migrate-playlists --kind 1063
+```
+
+Токены и snapshot не печатаются в лог. Секреты — только в `.env` / `.data/` (в `.gitignore`).
+
+---
+
+## Вариант B — Telegram-бот
+
+Тот же пайплайн в личке. Спека: [docs/telegram-bot.md](docs/telegram-bot.md).
+
+```bash
+# Не запускай одновременно CLI spotify-spike — тот же порт callback
 uv run yaspotsurfer-bot
 ```
 
-`scan` = `inspect`: `.data/library-snapshot.json`. Токены в лог не печатаются.
+| Команда | Смысл |
+|---------|--------|
+| `/start` `/help` | Дисклеймер, меню, статус связей |
+| `/connect_yandex` | Implicit URL из браузера |
+| `/connect_spotify` | OAuth в браузере |
+| `/scan` | Snapshot Яндекса |
+| `/plan` | Dry-run лайков (пачками из‑за ~650/сутки) |
+| `/review` | Спорные: кнопки 1 / 2 / Пропуск / Позже |
+| `/migrate` | Песочница или «Любимое» (слово `СОХРАНИТЬ`) |
+| `/playlists` | Короткий плейлист → `YaSpotSurfer: …` |
+| `/status` `/cancel` `/logout` | Ход работы, остановка, стереть ключи |
 
-## Команды
+---
+
+## Архитектура
+
+```text
+CLI / Telegram  →  application (сценарии + порты)  →  domain (Track, matching)
+                         ↑
+                 infrastructure (Yandex / Spotify / SQLite / .data)
+```
+
+- **domain** — сущности, нормализация, matching (без HTTP)
+- **application** — dry-run, review, write; порты `MusicCatalogSearcher`, `LibraryWriter`
+- **infrastructure** — адаптеры API и хранилище
+- **presentation** — CLI (`main.py`) и Telegram (`telegram/`)
+
+---
+
+## Команды CLI (шпаргалка)
 
 ### Авторизация и диагностика
 
 | Команда | Что делает |
 |---------|------------|
-| `probe` | Проверяет Yandex tokens на `/account/status`, без секретов в логе |
+| `probe` | Проверка Yandex Music token |
 | `auth-implicit` | Music-совместимый token через браузер |
-| `auth-app` | Свой OAuth app: token есть, Music API даёт 403 |
-| `probe-id` | Яндекс ID (`login.yandex.ru/info`), не Музыка |
-| `spotify-spike` | OAuth Spotify, search, тестовый плейлист, cleanup |
+| `auth-app` | Свой OAuth app (Music API обычно 403) |
+| `probe-id` | Яндекс ID, не Музыка |
+| `spotify-spike` | OAuth Spotify + короткий smoke |
 
 ### Библиотека и matching
 
 | Команда | Что делает |
 |---------|------------|
 | `scan` / `inspect` | Snapshot лайков и плейлистов |
-| `normalize-preview` | 20 лайков → нормализация (без API) |
-| `match-preview` | Offline self-match по snapshot |
-| `migrate-dry-run` / `migrate --dry-run` | Search + match, без записи |
-| `review` | Очередь; `--accept` / `--skip` `yandex:ID` |
+| `migrate-dry-run` | Search + match, без записи (**все** лайки по умолчанию) |
+| `review` | Очередь спорных; `--accept` / `--skip` |
+| `normalize-preview` / `match-preview` | Офлайн-превью |
 
-### Telegram-бот
-
-| Команда | Что делает |
-|---------|------------|
-| `uv run yaspotsurfer-bot` | `/start` … `/playlists`, `/status`, `/cancel`, `/logout` |
-
-### Запись в Spotify
+### Запись
 
 | Команда | Что делает |
 |---------|------------|
-| `migrate` | Auto-match (+ accepted). По умолчанию песочница, не Liked Songs |
-| `migrate-playlists` | Короткие плейлисты Яндекса → отдельные Spotify playlist |
+| `migrate` | Запись лайков; default → sandbox; `--dest library` → «Любимое» |
+| `migrate-playlists` | Копии плейлистов; default → все непустые, без обрезки треков |
 
-Полезные флаги: `--limit`, `--resume`, `--dest playlist` / `--dest library`, `--playlist-id`, `--kind`, `--track-limit`, `--dry-run`.
+Полезные флаги: `--limit`, `--track-limit`, `--resume`, `--dest`, `--playlist-id`, `--kind`, `--dry-run`.
 
-Репетиция больше 20 (не вся библиотека):
+---
 
-```bash
-uv run yandex-spike migrate --limit 50 --resume
-uv run yandex-spike migrate-playlists --limit 3 --track-limit 10 --resume
-```
-
-Тесты:
+## Тесты
 
 ```bash
-uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network tests.test_telegram_copy tests.test_bot_users tests.test_spotify_connect tests.test_yandex_connect tests.test_plan tests.test_scan
+uv run python -m unittest discover -s tests -v
 ```
 
-`tests/__init__.py` обязателен: иначе unittest подхватывает `tests` из `yandex-music`.
+Нужен `tests/__init__.py`: иначе unittest может подхватить чужой пакет `tests` из `yandex-music`.
 
-## Куда смотреть дальше
+---
 
-| Тема | Документ |
-|------|----------|
-| Песочница vs лайки, VPN | [docs/a7-cli.md](docs/a7-cli.md) |
-| Matching и пороги | [docs/matching.md](docs/matching.md) |
+## Документация
+
+| Тема | Файл |
+|------|------|
+| CLI, песочница, VPN | [docs/a7-cli.md](docs/a7-cli.md) |
+| Dry-run и квота Spotify | [docs/dry-run.md](docs/dry-run.md) |
+| Запись лайков | [docs/migrate.md](docs/migrate.md) |
+| Matching | [docs/matching.md](docs/matching.md) |
 | Домен и слои | [docs/domain.md](docs/domain.md) |
 | Telegram-бот (ТЗ) | [docs/telegram-bot.md](docs/telegram-bot.md) |
-| Dry-run и квота Spotify | [docs/dry-run.md](docs/dry-run.md) |
 | Яндекс auth | [docs/yandex-auth.md](docs/yandex-auth.md) |
 | Spotify spike | [docs/spotify-spike.md](docs/spotify-spike.md) |
 
+---
+
 ## Секреты
 
-Не коммитьте `.env` и `.data/` (токены, snapshot). Они в `.gitignore`. Redirect URL с `#access_token=` — только в локальный терминал, не в чат.
+Не коммить `.env` и `.data/` (токены, snapshot, SQLite).  
+Redirect с `#access_token=` — только в локальный терминал, не в чат и не в issue.
+
+---
+
+## Планы (без розовых очков)
+
+**Сделано:** CLI полный пайплайн; Telegram-бот B0–B9 (connect → scan → plan → review → migrate → playlists).
+
+**Ближайшее (B10):** боевой прогон большой медиатеки через бот/CLI с учётом квоты ~650 search/сутки — это дни ожидания, не «одна кнопка».
+
+**Не обещаем скоро:**
+
+- Extended Quota / чужие Spotify-аккаунты «из коробки» — у Spotify порог для организаций
+- Official Yandex library API — его нет; implicit останется хрупким
+- Мгновенный перенос тысяч треков — упирается в Dev Mode, не в «оптимизацию бота»
+- Донаты, web dashboard, двусторонняя синхронизация, LLM-matching — бэклог этапа C, не спринт B
+
+**Реалистичный запуск публичной беты для других:** свой VPS, HTTPS OAuth callback, очередь jobs, честный дисклеймер про квоту и Dev Mode. Без этого бот удобен в первую очередь автору app и тем, кого добавили в Dashboard.

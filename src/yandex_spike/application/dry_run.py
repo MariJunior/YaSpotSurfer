@@ -129,7 +129,9 @@ def run_dry_run(
     ``should_stop`` — кооперативная отмена (бот /cancel): checkpoint в ``processed``.
     """
     config = config or MatchConfig()
-    done = dict(processed or {})
+    # Мутируем переданный processed на месте — checkpoint при квоте/cancel видит прогресс.
+    resumed_from = bool(processed)
+    done = processed if processed is not None else {}
     rows: list[dict[str, Any]] = []
     total = len(tracks)
     cancelled = False
@@ -163,7 +165,7 @@ def run_dry_run(
         "wrote_to_spotify": False,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "track_count": len(rows),
-        "resumed": bool(processed),
+        "resumed": resumed_from,
         "cancelled": cancelled,
         "counts": dict(counts),
         "tz_counts": tz_counts,

@@ -1,67 +1,67 @@
-# CLI и как тестировать, не ломая медиатеку
+# CLI: полный перенос и безопасная репетиция
 
-## TypeScript — на каком этапе?
+CLI (`yandex-spike`) — **боевой** контур того же пайплайна, что и бот. Подходит для форка: можно перенести свою медиатеку без Telegram.
 
-**Ни на A, ни на B.** Бот (этап B) тоже Python: те же use cases, что CLI. TypeScript из черновика ТЗ §7 («в перспективе») не планируем, пока не появится отдельный web dashboard в **C**. Переписывать matching на TS не нужно.
+**TypeScript** на этапе A/B нет. Web dashboard (если появится) — этап C.
 
-## Где живая медиатека, где песочница
+## Куда пишем
 
-20 лайков уже в Spotify — ранний смоук записи, не финальный переезд.
+| Режим | Куда | Когда |
+|-------|------|--------|
+| Default | плейлист `YaSpotSurfer sandbox` | безопасная проверка matching |
+| `--dest library` | Liked Songs / «Любимое» | только после проверки песочницы |
+| `migrate-playlists` | `YaSpotSurfer: <имя Яндекса>` | копии плейлистов, лайки не трогает |
 
-| Этап | Куда пишем | Зачем |
-|------|------------|--------|
-| CLI, лайки | плейлист `YaSpotSurfer sandbox` (`--dest playlist`) | matching, review, resume |
-| CLI, плейлисты | `YaSpotSurfer: <имя Яндекса>` (`migrate-playlists`) | копия короткого плейлиста, не лайки |
-| CLI явно | `--dest library` | только если снова нужны лайки |
-| Бот | реальная медиатека | окончательная синхронизация |
+По умолчанию **вся** коллекция лайков / все непустые плейлисты. `--limit` / `--track-limit` — для репетиции на куске.
 
-Всю библиотеку (~4000 лайков, 51 плейлист) **не** гоняем в CLI как «боевой переезд». CLI должен уметь тот же пайплайн, что бот, на маленьком `--limit`.
-
-## Команды
+## Боевой прогон (лайки)
 
 ```bash
+uv run yandex-spike auth-implicit
+uv run yandex-spike probe
+uv run yandex-spike spotify-spike
 uv run yandex-spike scan
-uv run yandex-spike migrate-dry-run --limit 20
+uv run yandex-spike migrate-dry-run --resume
 uv run yandex-spike review
-uv run yandex-spike review --accept yandex:152459181
-uv run yandex-spike review --skip yandex:SOME_ID
-uv run yandex-spike migrate --limit 20
-uv run yandex-spike migrate --limit 20 --playlist-id PLAYLIST_ID
-uv run yandex-spike migrate --limit 20 --dest library
-uv run yandex-spike migrate --dry-run --limit 50
-uv run yandex-spike migrate --limit 50
-uv run yandex-spike migrate-playlists --limit 1
-uv run yandex-spike migrate-playlists --kind 1063 --track-limit 10
-uv run yandex-spike migrate-playlists --limit 3 --dry-run
+uv run yandex-spike migrate --resume                 # → sandbox
+uv run yandex-spike migrate --dest library --resume  # → «Любимое»
 ```
 
-`scan` = `inspect` (snapshot). `migrate` без `--dest` пишет в **песочницу**, не в Liked Songs. `migrate --dry-run` = `migrate-dry-run`. Если dry-run-state ещё нет на этот `--limit`, `migrate` сам доищет недостающие треки.
+При `QUOTA_EXCEEDED` (~650 search/сутки) checkpoint сохраняется → через часы снова с `--resume`. См. [dry-run.md](dry-run.md).
 
-`migrate-playlists` берёт самые короткие непустые плейлисты Яндекса (или один `--kind` из snapshot) и пишет каждый в **свой** Spotify playlist `YaSpotSurfer: <имя>`. Лайки не трогает. `--limit` здесь — число плейлистов, `--track-limit` (по умолчанию 10) режет гигантов. `--dry-run` только search. Отчёт `.data/migrate-report-playlists.json` **мержит** по kind, не затирает прошлые плейлисты.
-
-Matching кэшируется в `.data/dry-run-state.json`. Смена auto-порога пересчитывает status в кэше (например 0.905 → auto). `review` увидит оставшиеся спорные.
-
-Репетиция больше 20, не вся медиатека:
+## Репетиция на куске
 
 ```bash
 uv run yandex-spike migrate-dry-run --limit 50 --resume
 uv run yandex-spike review
 uv run yandex-spike migrate --limit 50 --resume
-uv run yandex-spike migrate-playlists --limit 3 --track-limit 10
+uv run yandex-spike migrate-playlists --limit 3 --track-limit 20 --resume
 ```
 
-Если create даёт 403 «unavailable in this country» — VPN (после Грузии Spotify с российского IP часто так отвечает) или создай плейлист руками с тем же именем.
+## Плейлисты
 
-VPN при этом может ронять **Яндекс** (`TimedOutError`, 5с по умолчанию). CLI ретраит, ждёт 20с, и если плейлист уже в `.data/raw/playlist-*-{kind}.json` — не ходит в Яндекс повторно. Один упавший плейлист не валит всю пачку `--limit 3`.
+```bash
+# Все непустые (сначала короткие), треки без обрезки
+uv run yandex-spike migrate-playlists --resume
 
-## Как проверить A7
+# Один kind из snapshot
+uv run yandex-spike migrate-playlists --kind 1063
+```
 
-1. `migrate --limit 20` — в Spotify появится (или дополнится) `YaSpotSurfer sandbox`.
-   Если create даёт 403 «unavailable in this country»: создай плейлист вручную в приложении
-   (то же имя) или `migrate --playlist-id <id>`. Лайки при этом не пишутся.
+`migrate --dry-run` = `migrate-dry-run`. Если dry-run-state ещё нет на нужный объём, `migrate` сам доищет недостающие треки.
+
+Matching кэшируется в `.data/dry-run-state.json`. Смена auto-порога пересчитывает status в кэше. `review` уважает accept/skip при следующей записи.
+
+## VPN
+
+- Spotify create/search → часто нужен VPN («unavailable in this country»).
+- Тот же VPN может ронять Яндекс (`TimedOutError`). CLI ретраит и читает `.data/raw/playlist-*-{kind}.json`, если уже качали.
+- Split tunnel: `oauth.yandex.ru`, `music.yandex.ru`, `api.music.yandex.net` мимо VPN.
+
+## Как проверить sandbox
+
+1. `migrate --limit 20` — появится/дополнится `YaSpotSurfer sandbox` (лайки не пишутся).
 2. Повтор `--resume` → `already`.
-3. `review` — очередь; accept/skip меняют dry-run-state, следующий migrate уважает решение.
-4. `migrate-playlists --limit 1` — в Spotify появится `YaSpotSurfer: <имя самого короткого>`.
-   Повтор с `--resume` → `already`. Песочницу плейлиста можно удалить руками.
-5. Репетиция: `migrate --limit 50` в песочницу лайков (не `--dest library`). Не 3996 и не все 51.
-6. Песочницу лайков (`YaSpotSurfer sandbox`) тоже можно удалить руками. Ранние тестовые лайки в медиатеке автоматически не откатываем.
+3. `review` → accept/skip → следующий migrate уважает решение.
+4. `migrate-playlists --limit 1` → `YaSpotSurfer: <имя>`.
+5. Песочницы можно удалить руками в Spotify. Автоотката тестовых лайков нет.

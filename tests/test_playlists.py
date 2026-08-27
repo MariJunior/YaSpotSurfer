@@ -30,6 +30,10 @@ class PlaylistSelectTests(unittest.TestCase):
         selected = select_playlist_headers(HEADERS, limit=2)
         self.assertEqual([row["kind"] for row in selected], [1061, 1062])
 
+    def test_selects_all_when_limit_none(self) -> None:
+        selected = select_playlist_headers(HEADERS, limit=None)
+        self.assertEqual([row["kind"] for row in selected], [1061, 1062, 1063])
+
     def test_selects_by_kind(self) -> None:
         selected = select_playlist_headers(HEADERS, limit=9, kind=1063)
         self.assertEqual(len(selected), 1)

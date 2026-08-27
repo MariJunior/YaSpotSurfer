@@ -16,11 +16,14 @@ def sandbox_playlist_name(yandex_title: str) -> str:
 def select_playlist_headers(
     headers: list[dict[str, Any]],
     *,
-    limit: int = 1,
+    limit: int | None = 1,
     kind: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Самые маленькие непустые, либо ровно один --kind. Не вся библиотека."""
-    if limit < 1:
+    """Самые маленькие непустые, либо ровно один --kind.
+
+    ``limit=None`` — все непустые (боевой перенос). Иначе — первые N по размеру.
+    """
+    if limit is not None and limit < 1:
         raise ValueError("limit должен быть >= 1")
 
     nonempty = [
@@ -48,6 +51,8 @@ def select_playlist_headers(
             int(header.get("kind") or 0),
         )
     )
+    if limit is None:
+        return nonempty
     return nonempty[:limit]
 
 
