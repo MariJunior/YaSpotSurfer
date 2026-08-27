@@ -38,6 +38,8 @@ from yandex_spike.telegram.handlers import (
     on_unknown_command,
 )
 from yandex_spike.telegram.plan_flow import cmd_cancel, cmd_plan, cmd_status
+from yandex_spike.telegram.migrate_flow import cmd_migrate
+from yandex_spike.telegram.playlists_flow import cmd_playlists
 from yandex_spike.telegram.review_flow import cmd_review, on_review_callback
 from yandex_spike.telegram.scan_flow import cmd_scan
 from yandex_spike.telegram.yandex_flow import cmd_connect_yandex
@@ -57,6 +59,8 @@ _BOT_COMMANDS = [
     ("scan", "Собрать список треков из Яндекса"),
     ("plan", "Подобрать лайки в Spotify"),
     ("review", "Разобрать спорные совпадения"),
+    ("migrate", "Записать совпадения в Spotify"),
+    ("playlists", "Скопировать короткий плейлист"),
     ("status", "Что сейчас происходит"),
     ("cancel", "Остановить ввод или долгую операцию"),
     ("logout", "Отключить аккаунты и стереть доступ"),
@@ -163,6 +167,12 @@ def build_application(
         CommandHandler("plan", cmd_plan, filters=private, block=False)
     )
     application.add_handler(CommandHandler("review", cmd_review, filters=private))
+    application.add_handler(
+        CommandHandler("migrate", cmd_migrate, filters=private, block=False)
+    )
+    application.add_handler(
+        CommandHandler("playlists", cmd_playlists, filters=private, block=False)
+    )
     application.add_handler(CommandHandler("status", cmd_status, filters=private))
     application.add_handler(CommandHandler("cancel", cmd_cancel, filters=private))
     application.add_handler(CommandHandler("logout", cmd_logout, filters=private))

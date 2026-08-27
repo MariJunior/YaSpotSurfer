@@ -378,8 +378,8 @@ Spotify: не подключён / подключён как <имя>
 - [x] **B5.** `/scan` → inspect, прогресс.
 - [x] **B6.** `/plan` dry-run + `/status` / `/cancel`; стоп на `QUOTA_EXCEEDED` + тексты про ~650/сутки.
 - [x] **B7.** `/review` кнопки (выбор кандидата / пропуск / позже).
-- [ ] **B8.** `/migrate` песочница, затем confirm → Liked Songs.
-- [ ] **B9.** `/playlists`.
+- [x] **B8.** `/migrate` песочница, затем confirm → Liked Songs.
+- [x] **B9.** `/playlists` (короткий плейлист → `YaSpotSurfer: …`).
 - [ ] **B10.** Боевой прогон **твоей** медиатеки в боте (не CLI).
 - [ ] **Запуск беты для других.** VPS, публичный OAuth URL, заявка Spotify quota, очередь jobs.
 

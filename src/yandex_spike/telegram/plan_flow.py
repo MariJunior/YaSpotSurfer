@@ -21,6 +21,7 @@ from yandex_spike.telegram.keyboards import after_plan_keyboard
 from yandex_spike.telegram.copy import (
     CANCEL_NOTHING,
     JOB_CANCEL_REQUESTED,
+    MIGRATE_LIBRARY_CONFIRM_CANCELLED,
     PLAN_ALREADY_RUNNING,
     PLAN_PROGRESS_PREFIX,
     PLAN_START,
@@ -40,6 +41,7 @@ from yandex_spike.telegram.jobs import (
     request_cancel,
     try_begin_job,
 )
+from yandex_spike.telegram.migrate_flow import cancel_migrate_library_await
 from yandex_spike.telegram.yandex_flow import cancel_yandex_await
 
 
@@ -234,7 +236,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Сначала ввод URL Яндекса, иначе активный job."""
+    """Сначала ввод URL Яндекса / confirm migrate, иначе активный job."""
     message = update.effective_message
     telegram_id = telegram_user_id(update)
     if message is None or telegram_id is None:
@@ -242,6 +244,10 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     if cancel_yandex_await(context):
         await message.reply_text(YANDEX_CONNECT_CANCELLED)
+        return
+
+    if cancel_migrate_library_await(context):
+        await message.reply_text(MIGRATE_LIBRARY_CONFIRM_CANCELLED)
         return
 
     job = request_cancel(context, telegram_id)

@@ -1,10 +1,10 @@
 # Migrate liked tracks
 
-Пишет в Spotify **только** `exact` и `high-confidence` из dry-run. `review` / `not-found` пропускаются.
+Пишет в Spotify **только** `exact` и `high-confidence` из dry-run, плюс `review` с `decision=accept`. `skip` / без решения / `not-found` — `skipped`.
 
 Сверка: [Save Items](https://developer.spotify.com/documentation/web-api/reference/save-library-items), [Check Saved Items](https://developer.spotify.com/documentation/web-api/reference/check-library-contains). Dev Mode 2026: `PUT/GET /me/library`, `uris` query, не `/me/tracks`. По одному URI: `requests` кодирует запятую как `%2C`.
 
-## Команда
+## CLI
 
 Сначала dry-run на тот же `--limit`:
 
@@ -18,7 +18,16 @@ uv run yandex-spike migrate --limit 20 --resume
 
 Повтор: contains / треки уже в плейлисте → `already`. Checkpoint: `.data/migrate-state-{dest}.json`.
 
+## Telegram-бот (`/migrate`)
+
+1. Нужен готовый `/plan` (файл `dry-run-state` у пользователя). **Новых search нет** — не жжём дневную квоту Dev Mode.
+2. Выбор:
+   - **Проверочный плейлист** `YaSpotSurfer sandbox` — сразу.
+   - **«Любимое»** — только после сообщения ровно `СОХРАНИТЬ` (отмена `/cancel`).
+3. Прогресс + `/cancel` с checkpoint в `.data/bot-users/<id>/migrate-state-{playlist|library}.json`.
+
 ## Отчёт
 
-- `.data/migrate-report.json` — `saved` / `already` / `skipped`
-- `.data/migrate-state.json` — `migration_id` + checkpoint
+- CLI: `.data/migrate-report-{dest}.json` — `saved` / `already` / `skipped`
+- CLI: `.data/migrate-state-{dest}.json` — `migration_id` + checkpoint
+- Бот: те же имена файлов в каталоге пользователя

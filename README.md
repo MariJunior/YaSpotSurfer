@@ -22,7 +22,7 @@ CLI (main) / Telegram  →  application (сценарии + порты)  →  do
 - **application** — dry-run, review, запись; порты `MusicCatalogSearcher` и `LibraryWriter`.
 - **infrastructure** — адаптеры Яндекса и Spotify, JSON в `.data/`.
 - **CLI** — аргументы, файлы, печать. OAuth пока в `yandex.py` / `spotify.py`.
-- **Telegram** — личка; `/connect_*`, `/scan`, `/plan`, `/review`, `/status`, `/cancel`, `/logout`.
+- **Telegram** — личка; `/connect_*`, `/scan`, `/plan`, `/review`, `/migrate`, `/playlists`, `/status`, `/cancel`, `/logout`.
 
 Spotify Dev Mode (2026) и неофициальный Music API Яндекса живут только в адаптерах.
 
@@ -38,7 +38,7 @@ Spotify Dev Mode (2026) и неофициальный Music API Яндекса �
 
 ## В разработке
 
-**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B7: `/review`; дальше `/migrate`.
+**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B9: `/playlists`; дальше боевой прогон медиатеки.
 
 CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
 
@@ -109,7 +109,7 @@ uv run yaspotsurfer-bot
 
 | Команда | Что делает |
 |---------|------------|
-| `uv run yaspotsurfer-bot` | `/start`, `/help`, `/connect_*`, `/scan`, `/plan`, `/review`, `/status`, `/cancel`, `/logout` |
+| `uv run yaspotsurfer-bot` | `/start` … `/playlists`, `/status`, `/cancel`, `/logout` |
 
 ### Запись в Spotify
 

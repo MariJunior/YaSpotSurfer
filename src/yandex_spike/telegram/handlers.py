@@ -11,7 +11,11 @@ from yandex_spike.telegram.copy import (
     CALLBACK_CONNECT_SPOTIFY,
     CALLBACK_CONNECT_YANDEX,
     CALLBACK_HELP,
+    CALLBACK_MIGRATE,
+    CALLBACK_MIGRATE_LIBRARY,
+    CALLBACK_MIGRATE_SANDBOX,
     CALLBACK_PLAN,
+    CALLBACK_PLAYLISTS,
     CALLBACK_REVIEW,
     CALLBACK_SCAN,
     CALLBACK_STATUS,
@@ -27,7 +31,14 @@ from yandex_spike.telegram.copy import (
 )
 from yandex_spike.telegram.deps import telegram_user_id, user_store
 from yandex_spike.telegram.keyboards import spotify_auth_keyboard, start_keyboard
+from yandex_spike.telegram.migrate_flow import (
+    migrate_receive_confirm,
+    start_migrate,
+    start_migrate_library_prompt,
+    start_migrate_sandbox,
+)
 from yandex_spike.telegram.plan_flow import start_plan
+from yandex_spike.telegram.playlists_flow import start_playlists
 from yandex_spike.telegram.review_flow import start_review
 from yandex_spike.telegram.scan_flow import start_scan
 from yandex_spike.telegram.yandex_flow import start_yandex_connect, yandex_receive_url
@@ -120,6 +131,18 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if query.data == CALLBACK_REVIEW:
         await start_review(update, context)
         return
+    if query.data == CALLBACK_MIGRATE:
+        await start_migrate(update, context)
+        return
+    if query.data == CALLBACK_MIGRATE_SANDBOX:
+        await start_migrate_sandbox(update, context)
+        return
+    if query.data == CALLBACK_MIGRATE_LIBRARY:
+        await start_migrate_library_prompt(update, context)
+        return
+    if query.data == CALLBACK_PLAYLISTS:
+        await start_playlists(update, context)
+        return
     if query.data == CALLBACK_STATUS:
         await query.answer()
         from yandex_spike.telegram.plan_flow import cmd_status
@@ -149,7 +172,9 @@ async def on_unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def on_plain_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Сначала paste URL для Яндекса, иначе — подсказка /help.
+    # Confirm migrate → paste Яндекса → иначе подсказка /help.
+    if await migrate_receive_confirm(update, context):
+        return
     if await yandex_receive_url(update, context):
         return
     message = update.effective_message

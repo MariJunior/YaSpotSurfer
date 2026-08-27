@@ -8,8 +8,15 @@ CALLBACK_CONNECT_SPOTIFY = "menu:sp"
 CALLBACK_SCAN = "menu:scan"
 CALLBACK_PLAN = "menu:plan"
 CALLBACK_REVIEW = "menu:review"
+CALLBACK_MIGRATE = "menu:mig"
+CALLBACK_MIGRATE_SANDBOX = "menu:mig_sb"
+CALLBACK_MIGRATE_LIBRARY = "menu:mig_lib"
+CALLBACK_PLAYLISTS = "menu:pl"
 CALLBACK_HELP = "menu:help"
 CALLBACK_STATUS = "menu:status"
+
+# Подтверждение записи в Liked Songs — ровно так (как в ТЗ).
+MIGRATE_LIBRARY_CONFIRM_WORD = "СОХРАНИТЬ"
 
 # Эмпирика Dev Mode (2026): ~650 search/сутки до QUOTA_EXCEEDED; не жёсткий лимит API.
 SPOTIFY_DAILY_SEARCH_SOFT_CAP = 650
@@ -26,7 +33,7 @@ UNKNOWN_COMMAND = (
     "• /start — меню\n"
     "• /help — как устроен перенос\n"
     "• /connect_yandex · /connect_spotify\n"
-    "• /scan · /plan · /review · /status · /cancel\n"
+    "• /scan · /plan · /review · /migrate · /playlists · /status · /cancel\n"
     "• /logout"
 )
 
@@ -169,8 +176,8 @@ HELP_TEXT = (
     "2️⃣ /scan — список треков из Яндекса\n"
     "3️⃣ /plan — поиск в Spotify + сводка\n"
     "4️⃣ /review — спорные по одному (кнопки)\n"
-    "5️⃣ /migrate — запись: сначала проверочный плейлист, "
-    "в «Любимые» — только после твоего «да» (скоро)\n"
+    "5️⃣ /migrate — запись лайков: сначала песочница, «Любимое» — слово СОХРАНИТЬ\n"
+    "6️⃣ /playlists — короткий плейлист Яндекса → «YaSpotSurfer: …»\n"
     "\n"
     "🔑 Вход\n"
     "• Яндекс → ссылка → скопируй адрес с # из браузера → пришли боту "
@@ -195,8 +202,8 @@ HELP_TEXT = (
     "\n"
     "🚪 /logout — отключить аккаунты и стереть ключи.\n"
     "\n"
-    "✅ Сейчас: /start /help /connect_* /scan /plan /review /status /cancel /logout\n"
-    "🔜 Скоро: /migrate"
+    "✅ Сейчас: /start /help /connect_* /scan /plan /review /migrate /playlists "
+    "/status /cancel /logout"
 )
 
 
@@ -247,7 +254,7 @@ def plan_done_text(
     next_step = (
         "➡️ Дальше: /review — разбери спорные по одному.\n"
         if review_count > 0
-        else "Спорных нет — можно ждать /migrate.\n"
+        else "Спорных нет — можно /migrate.\n"
     )
     return (
         f"{head}\n"
@@ -392,9 +399,142 @@ def review_accepted_flash(chosen_title: str | None) -> str:
 def review_done_text(*, accepted_hint: str | None = None) -> str:
     head = "✅ Спорные разобраны"
     if accepted_hint:
-        return f"{head}\n\nПоследнее: {accepted_hint}\n\n→ Дальше /migrate (скоро) · /status"
-    return f"{head}\n\n→ Дальше /migrate (скоро) · /status"
+        return f"{head}\n\nПоследнее: {accepted_hint}\n\n→ Дальше /migrate · /status"
+    return f"{head}\n\n→ Дальше /migrate · /status"
 
 
 def review_failed_text(reason: str) -> str:
     return f"❌ {reason}\n\n→ /review"
+
+
+MIGRATE_CHOOSE = (
+    "💾 Куда записать уверенные совпадения?\n"
+    "\n"
+    "Пишу только:\n"
+    "• 🟢 уверенный auto-match\n"
+    "• 🟡 спорные, которые ты принял в /review\n"
+    "\n"
+    "Пропуск / без решения / «нет в Spotify» — не трогаю.\n"
+    "\n"
+    "Рекомендую сначала проверочный плейлист "
+    "«YaSpotSurfer sandbox» — лайки Spotify не меняются.\n"
+    "В «Любимые» — только после отдельного подтверждения."
+)
+MIGRATE_LIBRARY_CONFIRM = (
+    "⚠️ Запись в «Любимое» Spotify\n"
+    "\n"
+    "Это уже настоящая медиатека, не песочница.\n"
+    "\n"
+    f"Чтобы продолжить, пришли одним сообщением слово:\n"
+    f"→ {MIGRATE_LIBRARY_CONFIRM_WORD}\n"
+    "\n"
+    "Отмена: /cancel"
+)
+MIGRATE_LIBRARY_CONFIRM_CANCELLED = (
+    "Запись в «Любимое» отменена.\n"
+    "→ Можно снова: /migrate"
+)
+MIGRATE_START_SANDBOX = (
+    "🧪 Пишу в проверочный плейлист «YaSpotSurfer sandbox»…\n"
+    "Лайки Spotify не трогаю.\n"
+    "\n"
+    "→ /status · /cancel"
+)
+MIGRATE_START_LIBRARY = (
+    "💚 Пишу в «Любимое» Spotify…\n"
+    "\n"
+    "→ /status · /cancel"
+)
+MIGRATE_PROGRESS_PREFIX = "💾 Записываю…\n"
+MIGRATE_ALREADY_RUNNING = (
+    "⏳ Уже идёт другая долгая операция.\n"
+    "→ Подожди или останови: /cancel"
+)
+
+
+def migrate_done_text(
+    *,
+    dest: str,
+    track_count: int,
+    saved: int,
+    already: int,
+    skipped: int,
+    cancelled: bool,
+    playlist_name: str | None = None,
+) -> str:
+    if cancelled:
+        head = "⏹ Запись остановлена"
+        foot = "\n➡️ Снова /migrate — продолжу с сохранённого места."
+    elif dest == "library":
+        head = "✅ Готово: «Любимое»"
+        foot = ""
+    else:
+        name = playlist_name or "YaSpotSurfer sandbox"
+        head = f"✅ Готово: плейлист «{name}»"
+        foot = (
+            "\n\nПроверь плейлист в Spotify.\n"
+            "Если всё ок — /migrate → «Любимое» (слово СОХРАНИТЬ)."
+        )
+    return (
+        f"{head}\n"
+        f"\n"
+        f"Обработано строк: {track_count}\n"
+        f"\n"
+        f"• 💾 Сохранено: {saved}\n"
+        f"• 📎 Уже были: {already}\n"
+        f"• ⏭ Пропущено: {skipped}"
+        f"{foot}\n"
+        f"\n"
+        f"ℹ️ /status"
+    )
+
+
+def migrate_failed_text(reason: str) -> str:
+    return f"❌ {reason}\n\n→ /migrate"
+
+
+PLAYLISTS_START = (
+    "📀 Копирую самый короткий плейлист Яндекса\n"
+    "\n"
+    "• до 10 треков\n"
+    "• в Spotify как «YaSpotSurfer: <имя>»\n"
+    "• лайки и sandbox лайков не трогаю\n"
+    "\n"
+    "📌 Если треков ещё не было в /plan — будут search "
+    f"(~{SPOTIFY_DAILY_SEARCH_SOFT_CAP}/сутки).\n"
+    "\n"
+    "→ /status · /cancel"
+)
+PLAYLISTS_ALREADY_RUNNING = (
+    "⏳ Уже идёт другая долгая операция.\n"
+    "→ Подожди или останови: /cancel"
+)
+
+
+def playlists_done_text(
+    *,
+    playlist_count: int,
+    entries: tuple | list,
+    cancelled: bool,
+) -> str:
+    head = "⏹ Копирование плейлистов остановлено" if cancelled else "✅ Плейлисты: готово"
+    lines = [head, "", f"Скопировано сейчас: {playlist_count}", ""]
+    for entry in entries:
+        name = entry.get("spotify_playlist_name") or "—"
+        counts = entry.get("counts") or {}
+        lines.append(
+            f"• {name}\n"
+            f"  💾 {counts.get('saved', 0)} · "
+            f"📎 {counts.get('already', 0)} · "
+            f"⏭ {counts.get('skipped', 0)}"
+        )
+    if cancelled:
+        lines.append("")
+        lines.append("➡️ Снова /playlists — продолжит с checkpoint.")
+    lines.append("")
+    lines.append("ℹ️ /status")
+    return "\n".join(lines)
+
+
+def playlists_failed_text(reason: str) -> str:
+    return f"❌ {reason}\n\n→ /playlists"

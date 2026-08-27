@@ -11,6 +11,8 @@ _JOBS_KEY = "active_jobs"
 
 KIND_SCAN = "scan"
 KIND_PLAN = "plan"
+KIND_MIGRATE = "migrate"
+KIND_PLAYLISTS = "playlists"
 
 
 @dataclass
@@ -28,6 +30,10 @@ class ActiveJob:
             return "собираю список треков из Яндекса"
         if self.kind == KIND_PLAN:
             return "подбираю треки в Spotify"
+        if self.kind == KIND_MIGRATE:
+            return "записываю треки в Spotify"
+        if self.kind == KIND_PLAYLISTS:
+            return "копирую плейлисты в Spotify"
         return self.kind
 
 
