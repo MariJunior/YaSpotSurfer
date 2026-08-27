@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import uuid
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from .application.migrate_playlists import (
 from .application.review import apply_decision, list_review_queue
 from .application.match_preview import preview_self_match
 from .application.normalize_preview import preview_liked_tracks
+from .cli_catalog import COMMAND_NAMES, format_help_text, normalize_command
+from .cli_menu import run_interactive_menu
 from .infrastructure.file_store import save_tracks
 from .infrastructure.spotify.library import SpotifyLibraryWriter
 from .infrastructure.spotify.playlists import (
@@ -772,34 +775,88 @@ def cmd_oauth_app_info() -> None:
         print(f"   • {scope}")
 
 
+def cmd_help() -> None:
+    print(format_help_text())
+
+
+def run_command(
+    command: str,
+    *,
+    limit: int | None = None,
+    resume: bool = False,
+    dest: str = "playlist",
+    playlist_name: str = SANDBOX_PLAYLIST_NAME,
+    playlist_id: str | None = None,
+    kind: int | None = None,
+    track_limit: int | None = None,
+    dry_run: bool = False,
+    accept: str | None = None,
+    skip: str | None = None,
+) -> None:
+    """Единый диспетчер для argparse и интерактивного меню."""
+    name = normalize_command(command) or ""
+    if name in {"help"}:
+        cmd_help()
+    elif name == "menu":
+        run_interactive_menu(run_command=run_command)
+    elif name == "probe":
+        cmd_probe()
+    elif name == "probe-id":
+        cmd_probe_id()
+    elif name == "oauth-app-info":
+        cmd_oauth_app_info()
+    elif name == "auth-implicit":
+        cmd_auth_implicit()
+    elif name == "auth-app":
+        cmd_auth_app()
+    elif name in {"inspect", "scan"}:
+        cmd_inspect()
+    elif name == "spotify-spike":
+        cmd_spotify_spike()
+    elif name == "normalize-preview":
+        cmd_normalize_preview()
+    elif name == "match-preview":
+        cmd_match_preview()
+    elif name == "migrate-dry-run" or (name == "migrate" and dry_run):
+        cmd_migrate_dry_run(limit=limit, resume=resume)
+    elif name == "review":
+        cmd_review(accept=accept, skip=skip)
+    elif name == "migrate-playlists":
+        cmd_migrate_playlists(
+            limit=limit,
+            resume=resume,
+            kind=kind,
+            track_limit=track_limit,
+            dry_run=dry_run,
+        )
+    elif name == "migrate":
+        cmd_migrate(
+            limit=limit,
+            resume=resume,
+            dest=dest,
+            playlist_name=playlist_name,
+            playlist_id=playlist_id,
+        )
+    else:
+        raise SystemExit(f"Неизвестная команда: {command!r}. См. uv run yandex-spike help")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "YaSpotSurfer CLI: перенос Яндекс Музыка → Spotify "
             "(scan → match → review → write)."
         ),
+        epilog="Справка по командам: uv run yandex-spike help · меню: uv run yandex-spike",
     )
     parser.add_argument(
         "command",
         nargs="?",
-        default="probe",
-        choices=(
-            "probe",
-            "probe-id",
-            "oauth-app-info",
-            "auth-implicit",
-            "auth-app",
-            "inspect",
-            "spotify-spike",
-            "normalize-preview",
-            "match-preview",
-            "scan",
-            "migrate-dry-run",
-            "review",
-            "migrate",
-            "migrate-playlists",
+        default=None,
+        help=(
+            "Команда (help, menu, scan, migrate, …). "
+            "Без аргумента в терминале — меню; иначе — help."
         ),
-        help="По умолчанию probe — не трогает snapshot библиотеки.",
     )
     parser.add_argument(
         "--limit",
@@ -853,43 +910,29 @@ def main() -> None:
     parser.add_argument("--skip", help="review: пропустить source_id")
     args = parser.parse_args()
 
-    if args.command == "probe":
-        cmd_probe()
-    elif args.command == "probe-id":
-        cmd_probe_id()
-    elif args.command == "oauth-app-info":
-        cmd_oauth_app_info()
-    elif args.command == "auth-implicit":
-        cmd_auth_implicit()
-    elif args.command == "auth-app":
-        cmd_auth_app()
-    elif args.command in {"inspect", "scan"}:
-        cmd_inspect()
-    elif args.command == "spotify-spike":
-        cmd_spotify_spike()
-    elif args.command == "normalize-preview":
-        cmd_normalize_preview()
-    elif args.command == "match-preview":
-        cmd_match_preview()
-    elif args.command == "migrate-dry-run" or (
-        args.command == "migrate" and args.dry_run
-    ):
-        cmd_migrate_dry_run(limit=args.limit, resume=args.resume)
-    elif args.command == "review":
-        cmd_review(accept=args.accept, skip=args.skip)
-    elif args.command == "migrate-playlists":
-        cmd_migrate_playlists(
-            limit=args.limit,
-            resume=args.resume,
-            kind=args.kind,
-            track_limit=args.track_limit,
-            dry_run=args.dry_run,
+    command = normalize_command(args.command)
+    if command is None:
+        # В интерактивном терминале — меню; в пайпах/CI — справка.
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            command = "menu"
+        else:
+            command = "help"
+    elif command not in COMMAND_NAMES:
+        parser.error(
+            f"неизвестная команда {args.command!r}. "
+            "Список: uv run yandex-spike help"
         )
-    else:
-        cmd_migrate(
-            limit=args.limit,
-            resume=args.resume,
-            dest=args.dest,
-            playlist_name=args.playlist_name,
-            playlist_id=args.playlist_id,
-        )
+
+    run_command(
+        command,
+        limit=args.limit,
+        resume=args.resume,
+        dest=args.dest,
+        playlist_name=args.playlist_name,
+        playlist_id=args.playlist_id,
+        kind=args.kind,
+        track_limit=args.track_limit,
+        dry_run=args.dry_run,
+        accept=args.accept,
+        skip=args.skip,
+    )

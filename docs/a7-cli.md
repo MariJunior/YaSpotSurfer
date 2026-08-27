@@ -17,6 +17,8 @@ CLI (`yandex-spike`) — **боевой** контур того же пайпл�
 ## Боевой прогон (лайки)
 
 ```bash
+uv run yandex-spike help
+uv run yandex-spike              # меню
 uv run yandex-spike auth-implicit
 uv run yandex-spike probe
 uv run yandex-spike spotify-spike

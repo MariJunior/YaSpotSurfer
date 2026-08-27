@@ -63,6 +63,15 @@ cp .env.example .env   # и заполни ключи
 
 Подходит, если форкаешь репозиторий и гоняешь всё локально.
 
+### Навигация
+
+```bash
+uv run yandex-spike              # интерактивное меню (в терминале)
+uv run yandex-spike help         # полный список команд (/help тоже ок)
+uv run yandex-spike menu         # меню явно
+uv run yandex-spike -h           # флаги argparse
+```
+
 ### 1. Авторизация
 
 ```bash
@@ -168,6 +177,7 @@ CLI / Telegram  →  application (сценарии + порты)  →  domain (T
 
 | Команда | Что делает |
 |---------|------------|
+| `help` / `menu` | Справка и интерактивное меню |
 | `probe` | Проверка Yandex Music token |
 | `auth-implicit` | Music-совместимый token через браузер |
 | `auth-app` | Свой OAuth app (Music API обычно 403) |
