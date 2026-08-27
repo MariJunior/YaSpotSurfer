@@ -37,8 +37,10 @@ from yandex_spike.telegram.handlers import (
     on_plain_text,
     on_unknown_command,
 )
+from yandex_spike.telegram.plan_flow import cmd_cancel, cmd_plan, cmd_status
 from yandex_spike.telegram.scan_flow import cmd_scan
-from yandex_spike.telegram.yandex_flow import cmd_cancel_yandex, cmd_connect_yandex
+from yandex_spike.telegram.yandex_flow import cmd_connect_yandex
+
 
 load_dotenv()
 
@@ -52,7 +54,9 @@ _BOT_COMMANDS = [
     ("connect_yandex", "Подключить Яндекс Музыку"),
     ("connect_spotify", "Подключить Spotify"),
     ("scan", "Собрать список треков из Яндекса"),
-    ("cancel", "Отменить ввод адреса Яндекса"),
+    ("plan", "Подобрать лайки в Spotify"),
+    ("status", "Что сейчас происходит"),
+    ("cancel", "Остановить ввод или долгую операцию"),
     ("logout", "Отключить аккаунты и стереть доступ"),
 ]
 
@@ -130,6 +134,7 @@ def build_application(
     application = (
         Application.builder()
         .token(token)
+        .concurrent_updates(True)
         .post_init(_post_init)
         .build()
     )
@@ -149,8 +154,14 @@ def build_application(
     application.add_handler(
         CommandHandler("connect_spotify", cmd_connect_spotify, filters=private)
     )
-    application.add_handler(CommandHandler("scan", cmd_scan, filters=private))
-    application.add_handler(CommandHandler("cancel", cmd_cancel_yandex, filters=private))
+    application.add_handler(
+        CommandHandler("scan", cmd_scan, filters=private, block=False)
+    )
+    application.add_handler(
+        CommandHandler("plan", cmd_plan, filters=private, block=False)
+    )
+    application.add_handler(CommandHandler("status", cmd_status, filters=private))
+    application.add_handler(CommandHandler("cancel", cmd_cancel, filters=private))
     application.add_handler(CommandHandler("logout", cmd_logout, filters=private))
     application.add_handler(CallbackQueryHandler(on_menu_callback, pattern=r"^menu:"))
     application.add_handler(MessageHandler(filters.COMMAND & private, on_unknown_command))

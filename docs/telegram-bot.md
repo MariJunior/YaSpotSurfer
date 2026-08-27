@@ -110,6 +110,8 @@ Telegram user.id
 
 Чтобы чужой Spotify **технически** логинился, нужен выход из Dev Mode / **quota extension**. Пока его нет — в `/help` честно пишем, что чужой OAuth может отвалиться. Это запуск, не отмена публичной беты.
 
+Отдельно от «чужой логин»: даже у владельца app в Dev Mode есть **дневная квота search** (`QUOTA_EXCEEDED`, `Retry-After` на часы). Эмпирика ~**650** поисков/сутки на наш client_id; Extended Quota для хобби-проекта практически недоступна. UX: честно в `/start` / `/help` / `/plan`, checkpoint + resume. Подробнее: [dry-run.md](dry-run.md).
+
 Яндекс: легального library API нет ([yandex-public-api.md](yandex-public-api.md)). UX — implicit (вставка URL с token) + дисклеймер в `/start`.
 
 Хостинг для чужих: публичный `https://…/oauth/spotify/callback`.
@@ -290,7 +292,7 @@ Spotify: не подключён / подключён как <имя>
 | `/connect_yandex` | Implicit URL |
 | `/connect_spotify` | OAuth |
 | `/scan` | Snapshot библиотеки Яндекса |
-| `/plan` | Dry-run лайков (и опционально плейлистов) |
+| `/plan` | Dry-run лайков; пачками из‑за ~650 search/сутки Dev Mode; resume с checkpoint |
 | `/review` | Следующий спорный трек |
 | `/migrate` | Запись; спросить dest sandbox vs library |
 | `/playlists` | Копии плейлистов в `YaSpotSurfer: …` |
@@ -343,8 +345,9 @@ Spotify: не подключён / подключён как <имя>
 |-------------|-----------|
 | Нет official Yandex library API | Дисклеймер в `/start` + unofficial implicit |
 | Spotify Dev Mode | Пока нет quota extension, чужой OAuth не взлетит — это задача запуска, не отмена публичности |
-| Search limit ≤ 10, запись URI по одному | Полный dry-run 4000 — десятки минут; прогресс обязателен |
-| 429 Spotify / timeout Яндекса | Resume + понятные сообщения про VPN |
+| Dev Mode: дневная квота search (`QUOTA_EXCEEDED`) | ~650 треков/сутки на app; большая библиотека — несколько дней; Extended Quota почти недоступна любителям |
+| Search limit ≤ 10, запись URI по одному | Полный dry-run 4000 — часы wall-clock + дни из‑за квоты; прогресс и resume обязательны |
+| Краткий 429 vs квота / timeout Яндекса | Короткий 429 — ждём в том же прогоне; квота — стоп + сообщение; Яндекс — VPN/split tunnel |
 | Сообщение 4096 символов | Отчёт файлом, не простынёй |
 | callback_data 64 байта | Состояние review в БД |
 | ~1 бот-процесс на polling | Не два ноутбука с одним токеном |
@@ -373,7 +376,7 @@ Spotify: не подключён / подключён как <имя>
 - [x] **B3.** HTTP callback Spotify + `/connect_spotify` (сначала localhost).
 - [x] **B4.** `/connect_yandex` (paste implicit URL).
 - [x] **B5.** `/scan` → inspect, прогресс.
-- [ ] **B6.** `/plan` dry-run + `/status` / `/cancel`.
+- [x] **B6.** `/plan` dry-run + `/status` / `/cancel`; стоп на `QUOTA_EXCEEDED` + тексты про ~650/сутки.
 - [ ] **B7.** `/review` кнопки.
 - [ ] **B8.** `/migrate` песочница, затем confirm → Liked Songs.
 - [ ] **B9.** `/playlists`.

@@ -18,9 +18,12 @@ from yandex_spike.application.yandex_connect import (
     complete_yandex_connect,
 )
 from yandex_spike.telegram.copy import (
+    CANCEL_NOTHING,
     YANDEX_CONNECT_CANCELLED,
     YANDEX_CONNECT_INTRO,
     YANDEX_CONNECTED,
+    YANDEX_CONNECT_PROGRESS,
+    YANDEX_CONNECT_SAVE_FAILED,
     yandex_connect_failed_text,
 )
 from yandex_spike.telegram.deps import telegram_user_id, user_store
@@ -94,7 +97,7 @@ async def yandex_receive_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await context.bot.send_message(
         chat_id=chat_id,
-        text="Проверяю доступ к Яндекс Музыке…",
+        text=YANDEX_CONNECT_PROGRESS,
     )
 
     error_text: str | None = None
@@ -110,9 +113,7 @@ async def yandex_receive_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
         error_text = yandex_connect_failed_text(str(exc))
     except Exception:
         logger.exception("Yandex connect failed")
-        error_text = yandex_connect_failed_text(
-            "Что-то пошло не так при сохранении. Попробуй /connect_yandex ещё раз."
-        )
+        error_text = YANDEX_CONNECT_SAVE_FAILED
 
     if error_text is not None:
         # Остаёмся в режиме ожидания — можно прислать URL ещё раз.
@@ -126,10 +127,18 @@ async def yandex_receive_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def cmd_cancel_yandex(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
-    if not is_awaiting_yandex_url(context):
+    if not cancel_yandex_await(context):
         if message is not None:
-            await message.reply_text("Сейчас нечего отменять.")
+            await message.reply_text(CANCEL_NOTHING)
         return
-    _set_awaiting(context, False)
     if message is not None:
         await message.reply_text(YANDEX_CONNECT_CANCELLED)
+
+
+def cancel_yandex_await(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """True, если был режим ожидания URL и его сняли."""
+    if not is_awaiting_yandex_url(context):
+        return False
+    _set_awaiting(context, False)
+    return True
+

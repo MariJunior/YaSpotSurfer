@@ -9,6 +9,7 @@ import secrets
 import threading
 import time
 import webbrowser
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -44,6 +45,41 @@ SCOPES = " ".join(
 
 SEARCH_QUERY = "track:Lullaby artist:The Cure"
 TEST_PLAYLIST_NAME = "YaSpotSurfer spike test"
+
+
+class SpotifyRateLimitError(RuntimeError):
+    """Краткий 429: можно подождать и продолжить тот же прогон."""
+
+
+class SpotifyQuotaExceeded(RuntimeError):
+    """Дневная/приложениевая квота Spotify исчерпана (Retry-After часами)."""
+
+    def __init__(self, message: str, *, retry_after_sec: int) -> None:
+        super().__init__(message)
+        self.retry_after_sec = retry_after_sec
+
+
+class SpotifyCancelled(RuntimeError):
+    """Пользователь нажал /cancel во время ожидания сети."""
+
+
+def _sleep_interruptible(
+    seconds: float,
+    *,
+    should_stop: Callable[[], bool] | None = None,
+    on_tick: Callable[[str], None] | None = None,
+    chunk_sec: float = 5.0,
+) -> None:
+    """Сон кусками: /cancel срабатывает, в чат можно писать «ещё Ns»."""
+    remaining = max(0.0, float(seconds))
+    while remaining > 0:
+        if should_stop is not None and should_stop():
+            raise SpotifyCancelled("Операция остановлена.")
+        step = min(chunk_sec, remaining)
+        if on_tick is not None and remaining >= chunk_sec:
+            on_tick(f"Spotify просит подождать ~{int(remaining)}с…")
+        time.sleep(step)
+        remaining -= step
 
 
 class SpotifyOAuthHandler(BaseHTTPRequestHandler):
@@ -229,6 +265,13 @@ def authenticate() -> str:
     return token_data["access_token"]
 
 
+def _parse_retry_after_seconds(response: requests.Response) -> int | None:
+    raw = response.headers.get("Retry-After", "")
+    if raw.isdigit():
+        return int(raw)
+    return None
+
+
 def _api(
     method: str,
     path: str,
@@ -237,9 +280,27 @@ def _api(
     params: dict | None = None,
     json_body: dict | None = None,
     attempts: int = 4,
+    should_stop: Callable[[], bool] | None = None,
+    on_wait: Callable[[str], None] | None = None,
+    persist_rate_limit: bool = False,
 ) -> requests.Response:
+    """HTTP к Spotify.
+
+    Краткий 429 (секунды/минуты): при ``persist_rate_limit`` ждём и продолжаем.
+    ``QUOTA_EXCEEDED`` / Retry-After на часы: сразу ``SpotifyQuotaExceeded`` —
+    крутить 15‑минутные циклы бессмысленно (квота на сутки).
+    """
     last_error: Exception | None = None
-    for attempt in range(1, attempts + 1):
+    network_attempt = 0
+    rate_streak = 0
+    # Короткие 429 — ждать и продолжать. Дольше часа — это квота, не «подожди чуть».
+    soft_limit_sec = 3600
+
+    while True:
+        if should_stop is not None and should_stop():
+            raise SpotifyCancelled("Операция остановлена.")
+
+        network_attempt += 1
         try:
             response = requests.request(
                 method,
@@ -250,26 +311,95 @@ def _api(
                 },
                 params=params,
                 json=json_body,
-                timeout=20,
+                timeout=(8, 20),
             )
         except (Timeout, ConnectionError) as exc:
             last_error = exc
             print(
                 f"Сеть: {method} {path} не достучался "
-                f"(попытка {attempt}/{attempts})."
+                f"(попытка {network_attempt}/{attempts}).",
+                flush=True,
             )
-            if attempt < attempts:
-                time.sleep(2 * attempt)
+            if network_attempt >= attempts:
+                break
+            _sleep_interruptible(
+                min(30, 2 * network_attempt),
+                should_stop=should_stop,
+                on_tick=None,
+            )
             continue
 
-        # Dev Mode 2026 легко ловит 429 на серии search.
-        if response.status_code == 429 and attempt < attempts:
-            retry_after = response.headers.get("Retry-After", "")
-            wait_sec = int(retry_after) if retry_after.isdigit() else 2 * attempt
-            print(f"429 {method} {path}, жду {wait_sec}с")
-            time.sleep(wait_sec)
+        if response.status_code != 429:
+            return response
+
+        rate_streak += 1
+        retry_after = _parse_retry_after_seconds(response)
+        body_excerpt = (response.text or "")[:200]
+        quota_hit = "QUOTA_EXCEEDED" in body_excerpt or (
+            retry_after is not None and retry_after > soft_limit_sec
+        )
+
+        if quota_hit:
+            wait = retry_after or soft_limit_sec
+            hours = max(1, (wait + 3599) // 3600)
+            print(
+                f"429 QUOTA {method} {path}: Retry-After={retry_after}с "
+                f"(~{hours} ч). Прекращаю прогон, checkpoint сохранит caller.",
+                flush=True,
+            )
+            raise SpotifyQuotaExceeded(
+                f"Исчерпана квота Spotify Web API на это приложение "
+                f"(не «подожди 15 минут», а примерно {hours} ч). "
+                f"Прогресс сохранён — продолжим после паузы тем же /plan.",
+                retry_after_sec=wait,
+            )
+
+        if retry_after is not None:
+            wait_sec = retry_after
+        else:
+            wait_sec = min(600, 30 * (2 ** min(rate_streak - 1, 4)))
+
+        if persist_rate_limit:
+            wait_sec = max(15, min(wait_sec, soft_limit_sec))
+            print(
+                f"429 {method} {path}: жду {wait_sec}с "
+                f"(streak={rate_streak}, Retry-After={retry_after or '—'})",
+                flush=True,
+            )
+            if on_wait is not None:
+                minutes = wait_sec // 60
+                if minutes >= 1:
+                    on_wait(
+                        f"Spotify просит паузу ~{minutes} мин — потом продолжу сам…"
+                    )
+                else:
+                    on_wait(f"Spotify просит подождать ~{wait_sec}с — продолжу сам…")
+            _sleep_interruptible(
+                wait_sec,
+                should_stop=should_stop,
+                on_tick=on_wait,
+            )
+            network_attempt = 0
             continue
-        return response
+
+        if rate_streak >= attempts:
+            raise SpotifyRateLimitError(
+                "Spotify временно ограничил частоту запросов (rate limit). "
+                "Повтори команду позже."
+            )
+        wait_sec = max(5, min(wait_sec, 120))
+        print(
+            f"429 {method} {path}, жду {wait_sec}с "
+            f"(попытка {rate_streak}/{attempts})",
+            flush=True,
+        )
+        if on_wait is not None:
+            on_wait(f"Spotify просит подождать ~{wait_sec}с…")
+        _sleep_interruptible(
+            wait_sec,
+            should_stop=should_stop,
+            on_tick=on_wait,
+        )
 
     raise RuntimeError(
         "Не удалось соединиться с api.spotify.com. "

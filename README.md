@@ -2,11 +2,13 @@
 
 Миграция **личной** музыкальной библиотеки из Яндекс Музыки в Spotify.
 
-Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B5 — `/scan` (снимок библиотеки Яндекса), дальше `/plan`.
+Целевой UX — **Telegram-бот**. CLI — отладочный контур того же пайплайна (`scan` → match → `review` → write). Бот: B6 — `/plan` (dry-run), дальше `/review`.
 
 Правило matching: **неверный auto-match хуже пропуска**. LLM для обычного matching не используется.
 
 Живую медиатеку (~4000 лайков, 51 плейлист) CLI **не** переносит целиком. Репетиция — песочница Spotify и `--limit`. Боевой переезд — этап бота.
+
+**Spotify Dev Mode:** дневная квота search (`QUOTA_EXCEEDED`) — эмпирика ~**650** треков/сутки на наш app. Extended Quota для хобби почти недоступна. `/plan` идёт пачками с checkpoint; см. [docs/dry-run.md](docs/dry-run.md).
 
 ## Как это устроено
 
@@ -20,7 +22,7 @@ CLI (main) / Telegram  →  application (сценарии + порты)  →  do
 - **application** — dry-run, review, запись; порты `MusicCatalogSearcher` и `LibraryWriter`.
 - **infrastructure** — адаптеры Яндекса и Spotify, JSON в `.data/`.
 - **CLI** — аргументы, файлы, печать. OAuth пока в `yandex.py` / `spotify.py`.
-- **Telegram** — личка; `/connect_yandex`, `/connect_spotify`, `/scan`, `/logout`.
+- **Telegram** — личка; `/connect_*`, `/scan`, `/plan`, `/status`, `/cancel`, `/logout`.
 
 Spotify Dev Mode (2026) и неофициальный Music API Яндекса живут только в адаптерах.
 
@@ -36,7 +38,7 @@ Spotify Dev Mode (2026) и неофициальный Music API Яндекса �
 
 ## В разработке
 
-**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B5: `/scan` пишет snapshot в `.data/bot-users/<telegram_id>/`; дальше `/plan`.
+**Этап B — Telegram-бот (Python).** Публичная бета без пейволла, тот же пайплайн что CLI. Донаты — идея на потом. ТЗ: [docs/telegram-bot.md](docs/telegram-bot.md). Сейчас B6: `/plan` + `/status` / `/cancel` (с учётом квоты ~650/сутки); дальше `/review`.
 
 CLI остаётся отладочным контуром. TypeScript на этом этапе нет.
 
@@ -107,7 +109,7 @@ uv run yaspotsurfer-bot
 
 | Команда | Что делает |
 |---------|------------|
-| `uv run yaspotsurfer-bot` | `/start`, `/help`, `/connect_yandex`, `/connect_spotify`, `/scan`, `/logout` |
+| `uv run yaspotsurfer-bot` | `/start`, `/help`, `/connect_*`, `/scan`, `/plan`, `/status`, `/cancel`, `/logout` |
 
 ### Запись в Spotify
 
@@ -128,7 +130,7 @@ uv run yandex-spike migrate-playlists --limit 3 --track-limit 10 --resume
 Тесты:
 
 ```bash
-uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network tests.test_telegram_copy tests.test_bot_users tests.test_spotify_connect tests.test_yandex_connect
+uv run python -m unittest tests.test_normalization tests.test_matching tests.test_dry_run tests.test_migrate tests.test_playlists tests.test_review tests.test_yandex_network tests.test_telegram_copy tests.test_bot_users tests.test_spotify_connect tests.test_yandex_connect tests.test_plan tests.test_scan
 ```
 
 `tests/__init__.py` обязателен: иначе unittest подхватывает `tests` из `yandex-music`.
@@ -141,6 +143,7 @@ uv run python -m unittest tests.test_normalization tests.test_matching tests.tes
 | Matching и пороги | [docs/matching.md](docs/matching.md) |
 | Домен и слои | [docs/domain.md](docs/domain.md) |
 | Telegram-бот (ТЗ) | [docs/telegram-bot.md](docs/telegram-bot.md) |
+| Dry-run и квота Spotify | [docs/dry-run.md](docs/dry-run.md) |
 | Яндекс auth | [docs/yandex-auth.md](docs/yandex-auth.md) |
 | Spotify spike | [docs/spotify-spike.md](docs/spotify-spike.md) |
 

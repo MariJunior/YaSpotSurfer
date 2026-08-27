@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from yandex_spike.application.ports import UserAccountStore
-from yandex_spike.infrastructure.yandex.library import inspect_library
+from yandex_spike.infrastructure.yandex.library import LibraryCancelled, inspect_library
 from yandex_spike.yandex import DATA_DIR
 
 ProgressFn = Callable[[str], None]
+StopFn = Callable[[], bool]
 
 # Snapshot каждого telegram_id отдельно — не пересекается с CLI `.data/library-snapshot.json`.
 BOT_USERS_DATA_DIR = DATA_DIR / "bot-users"
@@ -52,6 +53,7 @@ def scan_user_library(
     *,
     data_root: Path | None = None,
     progress: ProgressFn | None = None,
+    should_stop: StopFn | None = None,
 ) -> ScanResult:
     """Читает токен из store, пишет snapshot в `.data/bot-users/<id>/`."""
     token = store.read_yandex_token(telegram_id)
@@ -72,7 +74,12 @@ def scan_user_library(
             snapshot_path=snapshot_path,
             raw_dir=raw_dir,
             progress=progress,
+            should_stop=should_stop,
         )
+    except LibraryCancelled as exc:
+        raise ScanError(
+            "Сбор списка остановлен. Можно запустить /scan снова."
+        ) from exc
     except ScanError:
         raise
     except Exception as exc:  # noqa: BLE001 — в чат без traceback

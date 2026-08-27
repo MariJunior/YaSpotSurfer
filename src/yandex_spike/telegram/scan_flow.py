@@ -19,20 +19,12 @@ from yandex_spike.telegram.copy import (
     scan_failed_text,
 )
 from yandex_spike.telegram.deps import telegram_user_data_root, telegram_user_id, user_store
+from yandex_spike.telegram.jobs import KIND_SCAN, end_job, try_begin_job
+from yandex_spike.telegram.keyboards import after_scan_keyboard
 
 logger = logging.getLogger(__name__)
 
-# Не чаще одного edit в N секунд — лимиты Telegram + меньше мигания.
 _PROGRESS_MIN_INTERVAL_SEC = 1.5
-_SCAN_JOBS_KEY = "scan_jobs"
-
-
-def _scan_jobs(context: ContextTypes.DEFAULT_TYPE) -> set[int]:
-    jobs = context.application.bot_data.get(_SCAN_JOBS_KEY)
-    if jobs is None:
-        jobs = set()
-        context.application.bot_data[_SCAN_JOBS_KEY] = jobs
-    return jobs
 
 
 async def start_scan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -49,26 +41,27 @@ async def start_scan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if update.callback_query is not None:
         await update.callback_query.answer()
 
-    jobs = _scan_jobs(context)
-    if telegram_id in jobs:
+    job = try_begin_job(context, telegram_id, KIND_SCAN)
+    if job is None:
         await origin.reply_text(SCAN_ALREADY_RUNNING)
         return
 
     token = user_store(context).read_yandex_token(telegram_id)
     if not token:
+        end_job(context, telegram_id)
         await origin.reply_text(SCAN_NEED_YANDEX)
         return
 
-    jobs.add(telegram_id)
     status = await origin.reply_text(SCAN_START)
     try:
-        result = await _run_scan_with_progress(context, telegram_id, status)
+        result = await _run_scan_with_progress(context, telegram_id, status, job.cancel)
         await status.edit_text(
             scan_done_text(
                 liked_tracks=result.liked_tracks_count,
                 playlists=result.playlists_count,
                 liked_with_isrc=result.liked_tracks_with_isrc,
-            )
+            ),
+            reply_markup=after_scan_keyboard(),
         )
     except ScanError as exc:
         await status.edit_text(scan_failed_text(str(exc)))
@@ -80,19 +73,19 @@ async def start_scan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             )
         )
     finally:
-        jobs.discard(telegram_id)
+        end_job(context, telegram_id)
 
 
 async def _run_scan_with_progress(
     context: ContextTypes.DEFAULT_TYPE,
     telegram_id: int,
     status: Message,
+    cancel_event,
 ) -> ScanResult:
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[str | None] = asyncio.Queue()
 
     def on_progress(text: str) -> None:
-        # Из рабочего потока — только поставить в очередь.
         loop.call_soon_threadsafe(queue.put_nowait, f"{SCAN_PROGRESS_PREFIX}{text}")
 
     async def updater() -> None:
@@ -108,7 +101,6 @@ async def _run_scan_with_progress(
                         logger.debug("final progress edit skipped", exc_info=True)
                 break
             pending = item
-            # Забираем хвост очереди — в чат уходит только самое свежее.
             while not queue.empty():
                 nxt = queue.get_nowait()
                 if nxt is None:
@@ -137,6 +129,7 @@ async def _run_scan_with_progress(
             telegram_id,
             data_root=telegram_user_data_root(context),
             progress=on_progress,
+            should_stop=cancel_event.is_set,
         )
     finally:
         await queue.put(None)

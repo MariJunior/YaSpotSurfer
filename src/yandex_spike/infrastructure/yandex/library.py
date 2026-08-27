@@ -25,6 +25,7 @@ BATCH_PAUSE_SEC = 0.15
 YANDEX_TIMEOUT_SEC = 20
 
 ProgressFn = Callable[[str], None]
+StopFn = Callable[[], bool]
 
 
 def _write_json(path: Path, data: Any) -> None:
@@ -40,6 +41,15 @@ def _emit(progress: ProgressFn | None, message: str) -> None:
         progress(message)
     else:
         print(message)
+
+
+class LibraryCancelled(RuntimeError):
+    """Кооперативная отмена inspect (бот /cancel)."""
+
+
+def _check_stop(should_stop: StopFn | None) -> None:
+    if should_stop is not None and should_stop():
+        raise LibraryCancelled("Отменено")
 
 
 def connect_music_client(
@@ -199,12 +209,14 @@ def _fetch_tracks_batched(
     *,
     progress: ProgressFn | None = None,
     label: str = "треки",
+    should_stop: StopFn | None = None,
 ) -> list[Track]:
     """POST /tracks пачками: одно тело на много id, чтобы не упереться в лимит."""
     tracks: list[Track] = []
     total = len(track_ids)
 
     for start in range(0, total, TRACK_BATCH_SIZE):
+        _check_stop(should_stop)
         chunk = track_ids[start : start + TRACK_BATCH_SIZE]
         tracks.extend(call_yandex("tracks", client.tracks, chunk))
         done = min(start + TRACK_BATCH_SIZE, total)
@@ -306,6 +318,7 @@ def inspect_library(
     snapshot_path: Path | None = None,
     raw_dir: Path | None = None,
     progress: ProgressFn | None = None,
+    should_stop: StopFn | None = None,
 ) -> dict[str, Any]:
     """Полный snapshot лайков + заголовки всех плейлистов.
 
@@ -319,6 +332,7 @@ def inspect_library(
     out_raw = raw_dir or RAW_DIR
 
     client = connect_music_client(access_token, progress=progress)
+    _check_stop(should_stop)
     account = client.me.account if client.me and client.me.account else None
 
     out_raw.mkdir(parents=True, exist_ok=True)
@@ -332,6 +346,7 @@ def inspect_library(
 
     _emit(progress, "Читаю любимые треки…")
     liked_short = call_yandex("likes/tracks", client.users_likes_tracks)
+    _check_stop(should_stop)
     short_ids = list(liked_short.tracks_ids) if liked_short else []
     _write_json(
         out_raw / "liked-tracks-short.json",
@@ -345,15 +360,18 @@ def inspect_library(
             short_ids,
             progress=progress,
             label="Лайки",
+            should_stop=should_stop,
         )
         if short_ids
         else []
     )
+    _check_stop(should_stop)
     liked_raw = [track.to_dict() for track in liked_tracks]
     _write_json(out_raw / "liked-tracks.json", liked_raw)
 
     _emit(progress, "Читаю список плейлистов…")
     playlists = call_yandex("playlists/list", client.users_playlists_list) or []
+    _check_stop(should_stop)
     _write_json(
         out_raw / "playlists.json",
         [playlist.to_dict() for playlist in playlists],
@@ -369,6 +387,7 @@ def inspect_library(
 
     sample_normalized: list[dict[str, Any]] = []
     for playlist in sample_playlists:
+        _check_stop(should_stop)
         _emit(
             progress,
             f"Образец плейлиста «{playlist.title}» ({playlist.track_count})…",
@@ -393,6 +412,7 @@ def inspect_library(
                 track_ids,
                 progress=progress,
                 label=f"«{playlist.title}»",
+                should_stop=should_stop,
             )
             if track_ids
             else []
@@ -413,6 +433,7 @@ def inspect_library(
             }
         )
 
+    _check_stop(should_stop)
     _emit(progress, "Читаю любимых исполнителей и альбомы…")
     liked_artists = call_yandex("likes/artists", client.users_likes_artists) or []
     liked_albums = call_yandex("likes/albums", client.users_likes_albums) or []

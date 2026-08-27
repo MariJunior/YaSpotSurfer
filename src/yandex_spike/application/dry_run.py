@@ -122,14 +122,22 @@ def run_dry_run(
     processed: dict[str, dict[str, Any]] | None = None,
     config: MatchConfig | None = None,
     on_progress: ProgressFn | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
-    """Search + match. Никаких save/create — порт searcher их не содержит."""
+    """Search + match. Никаких save/create — порт searcher их не содержит.
+
+    ``should_stop`` — кооперативная отмена (бот /cancel): checkpoint в ``processed``.
+    """
     config = config or MatchConfig()
     done = dict(processed or {})
     rows: list[dict[str, Any]] = []
     total = len(tracks)
+    cancelled = False
 
     for track in tracks:
+        if should_stop is not None and should_stop():
+            cancelled = True
+            break
         existing = done.get(track.id)
         if existing:
             row = reclassify_match_row(existing, config)
@@ -156,6 +164,7 @@ def run_dry_run(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "track_count": len(rows),
         "resumed": bool(processed),
+        "cancelled": cancelled,
         "counts": dict(counts),
         "tz_counts": tz_counts,
         "processed": done,
