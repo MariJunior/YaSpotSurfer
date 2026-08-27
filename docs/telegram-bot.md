@@ -377,7 +377,7 @@ Spotify: не подключён / подключён как <имя>
 - [x] **B4.** `/connect_yandex` (paste implicit URL).
 - [x] **B5.** `/scan` → inspect, прогресс.
 - [x] **B6.** `/plan` dry-run + `/status` / `/cancel`; стоп на `QUOTA_EXCEEDED` + тексты про ~650/сутки.
-- [ ] **B7.** `/review` кнопки.
+- [x] **B7.** `/review` кнопки (выбор кандидата / пропуск / позже).
 - [ ] **B8.** `/migrate` песочница, затем confirm → Liked Songs.
 - [ ] **B9.** `/playlists`.
 - [ ] **B10.** Боевой прогон **твоей** медиатеки в боте (не CLI).

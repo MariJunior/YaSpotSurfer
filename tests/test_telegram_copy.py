@@ -33,6 +33,7 @@ class TelegramCopyTests(unittest.TestCase):
         self.assertIn("/logout", HELP_TEXT)
         self.assertIn("нейросет", HELP_TEXT)
         self.assertIn("Любимые", HELP_TEXT)
+        self.assertIn("/review", HELP_TEXT)
         self.assertIn(str(SPOTIFY_DAILY_SEARCH_SOFT_CAP), HELP_TEXT)
         self.assertIn("квота", HELP_TEXT.lower())
         self.assertNotIn("LLM", HELP_TEXT)

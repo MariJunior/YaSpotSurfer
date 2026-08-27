@@ -12,6 +12,7 @@ from yandex_spike.telegram.copy import (
     CALLBACK_CONNECT_YANDEX,
     CALLBACK_HELP,
     CALLBACK_PLAN,
+    CALLBACK_REVIEW,
     CALLBACK_SCAN,
     CALLBACK_STATUS,
     HELP_HINT,
@@ -27,9 +28,9 @@ from yandex_spike.telegram.copy import (
 from yandex_spike.telegram.deps import telegram_user_id, user_store
 from yandex_spike.telegram.keyboards import spotify_auth_keyboard, start_keyboard
 from yandex_spike.telegram.plan_flow import start_plan
+from yandex_spike.telegram.review_flow import start_review
 from yandex_spike.telegram.scan_flow import start_scan
 from yandex_spike.telegram.yandex_flow import start_yandex_connect, yandex_receive_url
-
 
 
 def _spotify_connect(context: ContextTypes.DEFAULT_TYPE) -> SpotifyConnectService | None:
@@ -106,7 +107,7 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     chat = update.effective_chat
     if chat is None or chat.type != Chat.PRIVATE:
         return
-    # Яндекс и scan сами делают query.answer() внутри своих start_*.
+    # Яндекс / scan / plan / review сами делают query.answer() внутри start_*.
     if query.data == CALLBACK_CONNECT_YANDEX:
         await start_yandex_connect(update, context)
         return
@@ -115,6 +116,9 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     if query.data == CALLBACK_PLAN:
         await start_plan(update, context)
+        return
+    if query.data == CALLBACK_REVIEW:
+        await start_review(update, context)
         return
     if query.data == CALLBACK_STATUS:
         await query.answer()

@@ -23,6 +23,13 @@ CREATE TABLE IF NOT EXISTS bot_users (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS review_callbacks (
+    token TEXT PRIMARY KEY,
+    telegram_id INTEGER NOT NULL,
+    source_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -39,7 +46,7 @@ class SqliteUserStore:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         with self._lock:
-            self._conn.execute(_SCHEMA)
+            self._conn.executescript(_SCHEMA)
             # DELETE: на Windows WAL мешает удалять файл в тестах.
             self._conn.execute("PRAGMA journal_mode=DELETE")
             self._conn.commit()
@@ -120,8 +127,46 @@ class SqliteUserStore:
         with self._lock:
             # Строку удаляем целиком: не оставляем чужие секреты и имя Spotify.
             self._conn.execute("DELETE FROM bot_users WHERE telegram_id = ?", (telegram_id,))
+            self._conn.execute(
+                "DELETE FROM review_callbacks WHERE telegram_id = ?",
+                (telegram_id,),
+            )
             self._conn.commit()
         return had
+
+    def put_review_token(self, token: str, telegram_id: int, source_id: str) -> None:
+        """Короткий token в callback_data → source_id (лимит Telegram 64 байта)."""
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM review_callbacks WHERE telegram_id = ?",
+                (telegram_id,),
+            )
+            self._conn.execute(
+                """
+                INSERT INTO review_callbacks (token, telegram_id, source_id, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (token, telegram_id, source_id, _now()),
+            )
+            self._conn.commit()
+
+    def get_review_token(self, token: str) -> tuple[int, str] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT telegram_id, source_id FROM review_callbacks WHERE token = ?",
+                (token,),
+            ).fetchone()
+        if row is None:
+            return None
+        return int(row["telegram_id"]), str(row["source_id"])
+
+    def clear_review_tokens(self, telegram_id: int) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM review_callbacks WHERE telegram_id = ?",
+                (telegram_id,),
+            )
+            self._conn.commit()
 
     def read_yandex_token(self, telegram_id: int) -> str | None:
         with self._lock:

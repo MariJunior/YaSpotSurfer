@@ -7,6 +7,7 @@ CALLBACK_CONNECT_YANDEX = "menu:ya"
 CALLBACK_CONNECT_SPOTIFY = "menu:sp"
 CALLBACK_SCAN = "menu:scan"
 CALLBACK_PLAN = "menu:plan"
+CALLBACK_REVIEW = "menu:review"
 CALLBACK_HELP = "menu:help"
 CALLBACK_STATUS = "menu:status"
 
@@ -25,7 +26,7 @@ UNKNOWN_COMMAND = (
     "• /start — меню\n"
     "• /help — как устроен перенос\n"
     "• /connect_yandex · /connect_spotify\n"
-    "• /scan · /plan · /status · /cancel\n"
+    "• /scan · /plan · /review · /status · /cancel\n"
     "• /logout"
 )
 
@@ -148,7 +149,7 @@ def start_text(*, yandex_connected: bool = False, spotify_display_name: str | No
         "Как это будет:\n"
         "1️⃣ подключаешь оба аккаунта\n"
         "2️⃣ бот читает музыку в Яндексе\n"
-        "3️⃣ ищет те же треки в Spotify (спорные — спросит)\n"
+        "3️⃣ ищет те же треки в Spotify (спорные — спросит в /review)\n"
         "4️⃣ сначала проверочный плейлист; в «Любимые» — только с твоего согласия\n"
         "\n"
         f"📌 Подбор в Spotify (/plan): ~{SPOTIFY_DAILY_SEARCH_SOFT_CAP} треков в сутки "
@@ -167,7 +168,7 @@ HELP_TEXT = (
     "1️⃣ /connect_yandex и /connect_spotify — аккаунты\n"
     "2️⃣ /scan — список треков из Яндекса\n"
     "3️⃣ /plan — поиск в Spotify + сводка\n"
-    "4️⃣ /review — спорные по одному (скоро)\n"
+    "4️⃣ /review — спорные по одному (кнопки)\n"
     "5️⃣ /migrate — запись: сначала проверочный плейлист, "
     "в «Любимые» — только после твоего «да» (скоро)\n"
     "\n"
@@ -194,8 +195,8 @@ HELP_TEXT = (
     "\n"
     "🚪 /logout — отключить аккаунты и стереть ключи.\n"
     "\n"
-    "✅ Сейчас: /start /help /connect_* /scan /plan /status /cancel /logout\n"
-    "🔜 Скоро: /review · /migrate"
+    "✅ Сейчас: /start /help /connect_* /scan /plan /review /status /cancel /logout\n"
+    "🔜 Скоро: /migrate"
 )
 
 
@@ -243,6 +244,11 @@ def plan_done_text(
     if cancelled:
         notes.append("➡️ Снова /plan — продолжу с сохранённого места.")
     note_block = ("\n" + "\n".join(notes) + "\n") if notes else "\n"
+    next_step = (
+        "➡️ Дальше: /review — разбери спорные по одному.\n"
+        if review_count > 0
+        else "Спорных нет — можно ждать /migrate.\n"
+    )
     return (
         f"{head}\n"
         f"\n"
@@ -256,7 +262,7 @@ def plan_done_text(
         "В Spotify уйдут только уверенные совпадения.\n"
         "Спорные и ненайденные сами не запишутся.\n"
         "\n"
-        "🔜 Дальше: /review и /migrate (ещё в работе).\n"
+        f"{next_step}"
         "ℹ️ Статус: /status"
     )
 
@@ -328,5 +334,67 @@ def status_last_plan_text(
         f"• 🟡 Нужно решение: {review_count}\n"
         f"• 🔴 Нет в Spotify: {not_found_count}\n"
         f"\n"
-        f"→ /plan снова · /help"
+        f"→ /plan снова · /review · /help"
     )
+
+
+REVIEW_EMPTY = (
+    "✅ Очередь спорных пуста.\n"
+    "\n"
+    "Либо всё разобрано, либо сначала нужен /plan.\n"
+    "→ /status · /help"
+)
+REVIEW_STALE = (
+    "⏳ Эта кнопка устарела.\n"
+    "→ Снова /review"
+)
+REVIEW_NEED_PLAN = (
+    "⚠️ Сначала /plan — без подбора разбирать нечего."
+)
+
+
+def review_card_text(
+    *,
+    title: str,
+    artists: tuple[str, ...] | list[str],
+    candidates: tuple[dict, ...] | list[dict],
+    open_remaining: int,
+) -> str:
+    artist_line = ", ".join(artists) if artists else "—"
+    lines = [
+        f"🟡 Спорный трек · осталось {open_remaining}",
+        "",
+        f"Яндекс: {artist_line} — {title}",
+        "",
+    ]
+    if not candidates:
+        lines.append("В Spotify подходящих вариантов почти нет.")
+        lines.append("→ Пропуск или «Позже».")
+    else:
+        lines.append("Варианты в Spotify:")
+        for index, cand in enumerate(candidates, start=1):
+            cand_artists = ", ".join(cand.get("artists") or []) or "—"
+            cand_title = cand.get("title") or "—"
+            score = cand.get("score")
+            score_s = f"{float(score):.2f}" if score is not None else "—"
+            lines.append(f"{index}. {cand_artists} — {cand_title}  ({score_s})")
+        lines.append("")
+        lines.append("Нажми номер варианта, «Пропуск» или «Позже».")
+    return "\n".join(lines)
+
+
+def review_accepted_flash(chosen_title: str | None) -> str:
+    if chosen_title:
+        return f"Принято: {chosen_title}"
+    return "Принято"
+
+
+def review_done_text(*, accepted_hint: str | None = None) -> str:
+    head = "✅ Спорные разобраны"
+    if accepted_hint:
+        return f"{head}\n\nПоследнее: {accepted_hint}\n\n→ Дальше /migrate (скоро) · /status"
+    return f"{head}\n\n→ Дальше /migrate (скоро) · /status"
+
+
+def review_failed_text(reason: str) -> str:
+    return f"❌ {reason}\n\n→ /review"

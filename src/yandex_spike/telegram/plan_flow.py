@@ -17,6 +17,7 @@ from yandex_spike.application.plan import (
     load_plan_summary,
     plan_liked_tracks,
 )
+from yandex_spike.telegram.keyboards import after_plan_keyboard
 from yandex_spike.telegram.copy import (
     CANCEL_NOTHING,
     JOB_CANCEL_REQUESTED,
@@ -77,7 +78,8 @@ async def start_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 not_found_count=result.not_found_count,
                 cancelled=result.cancelled,
                 resumed=result.resumed,
-            )
+            ),
+            reply_markup=after_plan_keyboard(has_review=result.review_count > 0),
         )
     except PlanQuotaExceededError as exc:
         hours = max(1, (exc.retry_after_sec + 3599) // 3600)

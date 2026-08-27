@@ -38,6 +38,7 @@ from yandex_spike.telegram.handlers import (
     on_unknown_command,
 )
 from yandex_spike.telegram.plan_flow import cmd_cancel, cmd_plan, cmd_status
+from yandex_spike.telegram.review_flow import cmd_review, on_review_callback
 from yandex_spike.telegram.scan_flow import cmd_scan
 from yandex_spike.telegram.yandex_flow import cmd_connect_yandex
 
@@ -55,6 +56,7 @@ _BOT_COMMANDS = [
     ("connect_spotify", "Подключить Spotify"),
     ("scan", "Собрать список треков из Яндекса"),
     ("plan", "Подобрать лайки в Spotify"),
+    ("review", "Разобрать спорные совпадения"),
     ("status", "Что сейчас происходит"),
     ("cancel", "Остановить ввод или долгую операцию"),
     ("logout", "Отключить аккаунты и стереть доступ"),
@@ -160,10 +162,12 @@ def build_application(
     application.add_handler(
         CommandHandler("plan", cmd_plan, filters=private, block=False)
     )
+    application.add_handler(CommandHandler("review", cmd_review, filters=private))
     application.add_handler(CommandHandler("status", cmd_status, filters=private))
     application.add_handler(CommandHandler("cancel", cmd_cancel, filters=private))
     application.add_handler(CommandHandler("logout", cmd_logout, filters=private))
     application.add_handler(CallbackQueryHandler(on_menu_callback, pattern=r"^menu:"))
+    application.add_handler(CallbackQueryHandler(on_review_callback, pattern=r"^rv:"))
     application.add_handler(MessageHandler(filters.COMMAND & private, on_unknown_command))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND & private, on_plain_text)

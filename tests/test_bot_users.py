@@ -60,6 +60,13 @@ class SqliteUserStoreTests(unittest.TestCase):
         self.assertIsNone(self.store.read_yandex_token(9))
         self.assertFalse(logout_account(self.store, 9))
 
+    def test_review_token_roundtrip_and_logout_clears(self) -> None:
+        self.store.put_review_token("aabbccdd", 5, "yandex:42")
+        self.assertEqual(self.store.get_review_token("aabbccdd"), (5, "yandex:42"))
+        self.store.save_yandex_token(5, "tok")
+        logout_account(self.store, 5)
+        self.assertIsNone(self.store.get_review_token("aabbccdd"))
+
     def test_wrong_key_looks_disconnected(self) -> None:
         self.store.save_yandex_token(3, "secret")
         other = SqliteUserStore(
