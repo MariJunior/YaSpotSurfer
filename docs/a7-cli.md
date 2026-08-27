@@ -18,7 +18,8 @@ CLI (`yandex-spike`) — **боевой** контур того же пайпл�
 
 ```bash
 uv run yandex-spike help
-uv run yandex-spike              # меню
+uv run yandex-spike              # TUI (Textual)
+uv run yandex-spike menu-classic # простое меню
 uv run yandex-spike auth-implicit
 uv run yandex-spike probe
 uv run yandex-spike spotify-spike

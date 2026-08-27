@@ -6,7 +6,7 @@
 
 | Контур | Для кого |
 |--------|----------|
-| **CLI** (`yandex-spike`) | Форк, свой компьютер, полный перенос без Telegram |
+| **CLI** (`yandex-spike`) | Форк, свой компьютер, полный перенос; удобный **TUI** в терминале |
 | **Telegram-бот** (`yaspotsurfer-bot`) | Тот же пайплайн в личке, удобный UX |
 
 > **Правило matching:** неверный auto-match хуже пропуска.  
@@ -24,6 +24,7 @@
 - Запись лайков: по умолчанию в плейлист-песочницу `YaSpotSurfer sandbox`; в «Любимое» — только явно (`--dest library` / в боте слово `СОХРАНИТЬ`)
 - Копии плейлистов Яндекса → отдельные Spotify playlist `YaSpotSurfer: <имя>`
 - Ретраи сети; raw-кэш плейлистов Яндекса, если VPN роняет API
+- **TUI в терминале** (Textual): сайдбар команд, статусы Yandex/Spotify, прогресс dry-run/квоты/записи, лог; OAuth Яндекса — через видимое поле ввода URL
 
 ---
 
@@ -63,14 +64,27 @@ cp .env.example .env   # и заполни ключи
 
 Подходит, если форкаешь репозиторий и гоняешь всё локально.
 
-### Навигация
+### Навигация и TUI
+
+Без аргументов в обычном терминале открывается **интерактивный TUI** на [Textual](https://textual.textualize.io/):
+
+- левый бар — команды текущего этапа (недоступные помечены);
+- сверху — статусы **Yandex / Spotify / Snapshot** (OK или нет) и подсказка этапа;
+- прогресс-бары dry-run, ориентира квоты search (~650/сутки), review и записи;
+- лог выполнения справа; для Яндекс OAuth — **модалка с видимым Input** (не ввод вслепую).
 
 ```bash
-uv run yandex-spike              # интерактивное меню (в терминале)
+uv sync                          # подтянет textual
+uv run yandex-spike              # TUI (нужен интерактивный терминал)
+uv run yandex-spike menu         # то же явно
 uv run yandex-spike help         # полный список команд (/help тоже ок)
-uv run yandex-spike menu         # меню явно
+uv run yandex-spike menu-classic # простое меню по номерам, без Textual
 uv run yandex-spike -h           # флаги argparse
 ```
+
+Горячие клавиши в TUI: `q` — выход, `r` — обновить статусы, `?` — справка.
+
+Долгие шаги из TUI идут с разумными дефолтами (`--resume`, migrate → песочница, без `--limit`). Запись в «Любимое» и точечный review — обычными командами CLI.
 
 ### 1. Авторизация
 
@@ -167,7 +181,7 @@ CLI / Telegram  →  application (сценарии + порты)  →  domain (T
 - **domain** — сущности, нормализация, matching (без HTTP)
 - **application** — dry-run, review, write; порты `MusicCatalogSearcher`, `LibraryWriter`
 - **infrastructure** — адаптеры API и хранилище
-- **presentation** — CLI (`main.py`) и Telegram (`telegram/`)
+- **presentation** — CLI (`main.py`), Textual TUI (`cli_tui/`) и Telegram (`telegram/`)
 
 ---
 
@@ -177,7 +191,8 @@ CLI / Telegram  →  application (сценарии + порты)  →  domain (T
 
 | Команда | Что делает |
 |---------|------------|
-| `help` / `menu` | Справка и интерактивное меню |
+| `help` / `menu` | Справка и TUI-меню (Textual) |
+| `menu-classic` | Простое меню без Textual |
 | `probe` | Проверка Yandex Music token |
 | `auth-implicit` | Music-совместимый token через браузер |
 | `auth-app` | Свой OAuth app (Music API обычно 403) |

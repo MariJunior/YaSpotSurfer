@@ -437,23 +437,35 @@ def parse_implicit_redirect(redirect_url: str) -> dict:
     }
 
 
-def authenticate_implicit() -> dict:
-    """Открывает implicit OAuth official-like client и ждёт ручной paste URL."""
+def authenticate_implicit(
+    *,
+    redirect_url: str | None = None,
+    open_browser: bool = True,
+) -> dict:
+    """Открывает implicit OAuth official-like client и сохраняет token.
+
+    ``redirect_url`` — полный URL с ``#access_token=...``.
+    Если не передан — спросит через ``input()`` (обычный CLI).
+    В TUI: сначала модалка, затем вызов с ``redirect_url=...``, ``open_browser=False``.
+    """
     auth_url = build_implicit_auth_url()
 
-    print("Implicit OAuth через official-like client_id")
-    print()
-    print("1. Откроется браузер. Войди в Яндекс и разреши доступ.")
-    print("2. Страница music.yandex.ru редиректит очень быстро.")
-    print("   Скопируй полный URL с #access_token=... до второго редиректа.")
-    print("   При необходимости включи Network throttling в DevTools.")
-    print()
-    print(f"Открываю: {auth_url}")
-    print()
+    if open_browser:
+        print("Implicit OAuth через official-like client_id")
+        print()
+        print("1. Откроется браузер. Войди в Яндекс и разреши доступ.")
+        print("2. Страница music.yandex.ru редиректит очень быстро.")
+        print("   Скопируй полный URL с #access_token=... до второго редиректа.")
+        print("   При необходимости включи Network throttling в DevTools.")
+        print()
+        print(f"Открываю: {auth_url}")
+        print()
+        webbrowser.open(auth_url)
 
-    webbrowser.open(auth_url)
-
-    redirect_url = input("Вставь полный redirect URL: ").strip()
+    if redirect_url is None:
+        redirect_url = input("Вставь полный redirect URL: ").strip()
+    else:
+        redirect_url = redirect_url.strip()
 
     if not redirect_url:
         raise RuntimeError("Пустой ввод: URL не получен.")

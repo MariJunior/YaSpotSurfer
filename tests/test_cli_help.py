@@ -26,6 +26,7 @@ class CliHelpTests(unittest.TestCase):
             "migrate",
             "migrate-playlists",
             "menu",
+            "menu-classic",
         ):
             self.assertIn(name, text)
         self.assertIn("650", text)

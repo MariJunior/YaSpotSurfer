@@ -119,12 +119,19 @@ def cmd_probe() -> None:
     )
 
 
-def cmd_auth_implicit() -> None:
+def cmd_auth_implicit(
+    *,
+    redirect_url: str | None = None,
+    open_browser: bool = True,
+) -> None:
     print("Yandex implicit auth")
     print("-" * 40)
     print()
 
-    result = authenticate_implicit()
+    result = authenticate_implicit(
+        redirect_url=redirect_url,
+        open_browser=open_browser,
+    )
     fingerprint = result["fingerprint"]
     probe = result["probe"]
 
@@ -792,12 +799,30 @@ def run_command(
     dry_run: bool = False,
     accept: str | None = None,
     skip: str | None = None,
+    redirect_url: str | None = None,
+    open_browser: bool = True,
 ) -> None:
     """Единый диспетчер для argparse и интерактивного меню."""
     name = normalize_command(command) or ""
     if name in {"help"}:
         cmd_help()
     elif name == "menu":
+        # Textual TUI; при отсутствии пакета / не-TTY — классическое меню.
+        try:
+            from .cli_tui import run_tui
+
+            run_tui(run_command=run_command)
+        except ImportError:
+            print(
+                "Пакет textual не установлен — классическое меню.\n"
+                "Добавь зависимость и выполни: uv sync",
+                file=sys.stderr,
+            )
+            run_interactive_menu(run_command=run_command)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            run_interactive_menu(run_command=run_command)
+    elif name == "menu-classic":
         run_interactive_menu(run_command=run_command)
     elif name == "probe":
         cmd_probe()
@@ -806,7 +831,7 @@ def run_command(
     elif name == "oauth-app-info":
         cmd_oauth_app_info()
     elif name == "auth-implicit":
-        cmd_auth_implicit()
+        cmd_auth_implicit(redirect_url=redirect_url, open_browser=open_browser)
     elif name == "auth-app":
         cmd_auth_app()
     elif name in {"inspect", "scan"}:
